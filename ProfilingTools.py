@@ -497,6 +497,22 @@ def create_profile(id_list, filename):
     f.close()
     return
 
+def check_rank(id):
+    '''
+    Check if all ranks are present
+    :param id: a taxid to be checked
+    :return: nothing if any of the ranks is missing. otherwise return id
+    '''
+    rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
+    lineage = ncbi.get_lineage(id) #get lineage dict
+    ranks = ncbi.get_rank(lineage).values()
+    for r in rank_list:
+        if r not in ranks:
+            print("rank %s not present" %r)
+            return
+    return id
+
+
 
 def test_normalize():
     import EMDUnifrac as EMDU
