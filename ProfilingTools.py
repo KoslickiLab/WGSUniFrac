@@ -501,6 +501,16 @@ def create_profile(id_list, filename):
     return
 
 
+def filter_id_list(id_list):
+    filtered_list = []
+    for id in id_list:
+        passed = check_rank(id)
+        if passed is not None:
+            filtered_list.append(passed)
+        else:
+            print("%s failed check" % id)
+    return filtered_list
+
 def check_rank(id):
     '''
     Check if all ranks are present
@@ -517,15 +527,6 @@ def check_rank(id):
     return id
 
 
-def filter_id(id_list):
-    filtered_list = []
-    for id in id_list:
-        try:
-            passed = check_rank(id)
-            filtered_list.append(passed)
-        except NameError:
-            print("%s failed check" % id)
-    return filtered_list
 
 
 def test_normalize():
