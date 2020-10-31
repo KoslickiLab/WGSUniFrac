@@ -2,10 +2,12 @@ import copy
 import numpy as np
 import sys
 from ete3 import NCBITaxa
+
 ncbi = NCBITaxa()
 
+
 class Profile(object):
-    def __init__(self, sample_metadata=None, profile=None, branch_length_fun=lambda x: 1/x):
+    def __init__(self, sample_metadata=None, profile=None, branch_length_fun=lambda x: 1 / x):
         self.sample_metadata = sample_metadata
         self.profile = profile
         self._data = dict()
@@ -465,37 +467,39 @@ class Profile(object):
 
         return Tint2, lint2, nodes_in_order2, nodes_to_index, P / 100., Q / 100.
 
+
 def create_profile(id_list, filename):
-    f = open(filename,"w")
+    f = open(filename, "w")
     f.write("# Taxonomic Profiling Output\n"
             "@SampleID:SAMPLEID\n"
             "@Version:0.9.1\n"
             "@Ranks:superkingdom|phylum|class|order|family|genus|species\n"
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
             "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
-    rank_list = (["superkingdom","phylum", "class","order","family","genus","species"])
-    perc = 1./len(id_list)*100
+    rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
+    perc = 1. / len(id_list) * 100
     for id in id_list:
-        lin_list = ncbi.get_lineage(id) #get lineage
-        lin_dict = ncbi.get_rank(lin_list) #create dict id:rank
-        lin_dict_reverse = {y:x for x,y in lin_dict.items()} #reverse dict rank:id
+        lin_list = ncbi.get_lineage(id)  # get lineage
+        lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
+        lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
         taxpath = ""
         namepath = ""
         for rank in rank_list:
             taxid = lin_dict_reverse[rank]
             name = ncbi.get_taxid_translator([taxid])[taxid]
             if len(taxpath) == 0:
-                taxpath+=str(taxid)
+                taxpath += str(taxid)
             else:
-                taxpath = taxpath+"|"+str(taxid)
+                taxpath = taxpath + "|" + str(taxid)
             if len(namepath) == 0:
                 namepath += name
             else:
                 namepath = namepath + "|" + name
-            f.writelines([str(taxid),"\t", rank, "\t", taxpath, "\t", namepath, "\t", str(perc)])
+            f.writelines([str(taxid), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(perc)])
             f.write("\n")
     f.close()
     return
+
 
 def check_rank(id):
     '''
@@ -504,14 +508,24 @@ def check_rank(id):
     :return: nothing if any of the ranks is missing. otherwise return id
     '''
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
-    lineage = ncbi.get_lineage(id) #get lineage dict
+    lineage = ncbi.get_lineage(id)  # get lineage dict
     ranks = ncbi.get_rank(lineage).values()
     for r in rank_list:
         if r not in ranks:
-            print("rank %s not present" %r)
+            print("rank %s not present" % r)
             return
     return id
 
+
+def filter_id(id_list):
+    filtered_list = []
+    for id in id_list:
+        try:
+            passed = check_rank(id)
+            filtered_list.append(passed)
+        except NameError:
+            print("%s failed check" % id)
+    return filtered_list
 
 
 def test_normalize():
@@ -726,5 +740,3 @@ def test_no_normalize():
     correct_vals = {'0': 0.10, '1': 0.50, '2': 0.20, '3': 0.0, '4': 0.10, '5': 0.00}
     for key, val in correct_vals.items():
         assert P[nodes_to_index[key]] == val
-
-
