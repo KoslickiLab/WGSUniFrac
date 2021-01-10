@@ -2,7 +2,6 @@ import copy
 import numpy as np
 import sys
 from ete3 import NCBITaxa
-
 ncbi = NCBITaxa()
 
 
@@ -468,8 +467,13 @@ class Profile(object):
         return Tint2, lint2, nodes_in_order2, nodes_to_index, P / 100., Q / 100.
 
 
-def create_profile(id_list, filename):
-    f = open(filename, "w")
+def create_profile(id_list, outdir, filename):
+    filtered_list = filter_id_list(id_list)
+    if len(filtered_list) == 0:
+        print("nothing is left.")
+        return
+    outfile = outdir + '/' + filename
+    f = open(outfile, "w+")
     f.write("# Taxonomic Profiling Output\n"
             "@SampleID:SAMPLEID\n"
             "@Version:0.9.1\n"
@@ -477,8 +481,8 @@ def create_profile(id_list, filename):
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
             "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
-    perc = 1. / len(id_list) * 100
-    for id in id_list:
+    perc = 1. / len(filtered_list) * 100
+    for id in filtered_list:
         lin_list = ncbi.get_lineage(id)  # get lineage
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
@@ -500,15 +504,12 @@ def create_profile(id_list, filename):
     f.close()
     return
 
-
 def filter_id_list(id_list):
     filtered_list = []
     for id in id_list:
-        passed = check_rank(id)
-        if passed is not None:
-            filtered_list.append(passed)
-        else:
-            print("%s failed check" % id)
+        if check_rank(id):
+            filtered_list.append(id)
+    print("total %s passed"  %len(filtered_list))
     return filtered_list
 
 def check_rank(id):
@@ -518,16 +519,29 @@ def check_rank(id):
     :return: nothing if any of the ranks is missing. otherwise return id
     '''
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
-    lineage = ncbi.get_lineage(id)  # get lineage dict
+    try:
+        lineage = ncbi.get_lineage(id)  # get lineage dict
+    except ValueError:
+        return False
     ranks = ncbi.get_rank(lineage).values()
     for r in rank_list:
         if r not in ranks:
             print("rank %s not present" % r)
-            return
-    return id
+            return False
+    return True
 
-
-
+def parse_taxid_file(filename):
+    '''
+    parses a file containing taxids into a list of taxids
+    :param filename: a file with a taxid in each line
+    :return: a list of taxids
+    '''
+    id_lst = []
+    with open(filename) as file:
+        for line in file:
+            line = line.strip()
+            id_lst.append(line)
+    return id_lst
 
 def test_normalize():
     import EMDUnifrac as EMDU
