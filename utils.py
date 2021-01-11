@@ -4,6 +4,7 @@ import os
 import ProfilingTools as pf
 import numpy as np
 import EMDUnifrac as unifrac
+from biom import Table
 
 def write_list_to_file(file, lst):
     with open(file, 'w') as f:
@@ -24,9 +25,9 @@ def parse_file_by_col(file, col):
     f.close()
     return lst
 
-def pick_otu(node, num):
+def pick_otu(node, map_dict, num):
     '''
-    filter leaf nodes of node to pick only those in otu_ref, and pick num of them randomly
+
     :param node:
     :param num: number of leaves to be picked, if not enough, will be replaced by the max number of nodes pickable
     :return:
@@ -49,14 +50,33 @@ def pick_otu(node, num):
             picked.append(leaf_names[r])
     return picked
 
-def create_biom_table(sample_metadata, table_id, *data):
+def create_biom_table(sample_metadata, table_id, data, filename):
+    '''
+
+    :param sample_metadata:
+    :param table_id:
+    :param data: dictionary in the form of sample_id:list of otus
+    :return:
+    '''
     otus = []
-    sample_id = []
-    for d in data:
-        key, value = list(d.items())[0]
+    sample_id = [] #column index
+    for key,value in list(data.items()):
         sample_id.append(key)
-        otus.append(value)
-    otu_ids = list(set(otus))
+        otus = otus + value
+    otu_ids = list(set(otus)) #row index unique otus
+    df = pd.DataFrame(columns=sample_id, index=otu_ids)
+    print(df)
+    for sample in sample_id:
+        sample_data = np.zeros(len(otu_ids))
+        for i, otu in enumerate(otu_ids):
+            if otu in list(data[sample]):
+                sample_data[i] = 1
+        df[sample] = sample_data #fill by column
+    table = Table(data=df.to_numpy(), observation_ids=otu_ids, sample_ids=sample_id, observation_metadata=None,
+                  sample_metadata=None, table_id=table_id)
+    normed = table.norm(axis='sample', inplace=False)
+    with open(filename, "w") as f:
+        normed.to_tsv(direct_io=f)
 
 def get_valid_otu(otu_file, taxid_file, filename):
     '''

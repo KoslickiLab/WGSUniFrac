@@ -8,13 +8,8 @@ from skbio.stats.ordination import pcoa
 import matplotlib.pyplot as plt
 import itertools as it
 from skbio import TreeNode
-import json
 from skbio.stats.ordination import pcoa
 from skbio import DistanceMatrix
-import random
-
-#tree = TreeNode.read('data/gg/gg_13_5_otu/trees/99_otus.tree')
-#ann_tree = TreeNode.read('data/gg/gg_13_5_otus_99_annotated.tree')
 
 def pairwise_unifrac(dir):
     '''
@@ -48,63 +43,6 @@ def pairwise_unifrac(dir):
     os.chdir(cur_dir)
     return sample_lst, dist_matrix
 
-def parse_file_by_col(file, col):
-    '''
-    Parse a file and store a column into a list
-    :param file:
-    :param col:
-    :return:
-    '''
-    lst = []
-    with open(file, 'r') as f:
-        for line in f.readlines():
-            lst.append(line.split('\t')[col])
-    f.close()
-    return lst
-
-def filter_otus(lst1, lst2):
-    '''
-    return a list of otus in lst 1 that is also in lst 2.
-    to filter off otus not found on the phylogenetic tree
-    :param lst1: a list of otus in concern
-    :param lst2: a list of nodes present in the tree
-    :return:
-    '''
-    return list(set(lst1) & set(lst2))
-
-def write_list_to_file(file, lst):
-    with open(file, 'w') as f:
-        for x in lst:
-            f.write("%s\n" %x)
-
-def pick_otu(node, otu_ref, num):
-    '''
-    filter leave nodes of node n to pick only those in otu_ref, and pick num of them randomly
-    :param node:
-    :param otu_ref: list of otus to check against
-    :param num: number of leaves to be picked, if not enough, will be replaced by the max number of nodes pickable
-    :return:
-    '''
-    if node.is_leaf():
-        print("%s is a leaf" %node)
-        return
-    leaves = node.get_leaves()
-    leaf_names = []
-    for l in leaves:
-        leaf_names.append(l.name)
-    filtered = filter_otus(leaf_names, otu_ref)
-    if num > len(filtered):
-        print("%d pickable nodes" %len(filtered))
-        num = len(filtered)
-    picked = []
-    for i in range(num):
-        r = random.randint(1, len(filtered))
-        if filtered[r] not in picked:
-            picked.append(filtered[r])
-    return picked
-
-
-#def get_taxid(otu):
 
 if __name__ == '__main__':
 
