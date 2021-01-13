@@ -26,7 +26,7 @@ def parse_file_by_col(file, col):
     f.close()
     return lst
 
-def pick_otu(node, map_dict, num):
+def pick_otu_random(node, map_dict, num):
     '''
 
     :param node:
@@ -54,7 +54,56 @@ def pick_otu(node, map_dict, num):
             otu = filtered_leaves[r]
             picked.append(otu)
             picked_tax.append(map_dict[otu])
-    return picked
+    return picked, picked_tax
+
+def pick_by_dist(tree, node, map_dict, num, close_enough):
+    if len(close_enough) < num:
+        print("you ask for too much, I only have %d nodes satisfying your requirement" %len(close_enough))
+        return
+    picked=[]
+    picked_tax = []
+    for i in range(num):
+        r = random.randint(1, len(close_enough))
+        if close_enough[r] not in picked:
+            otu = close_enough[r]
+            picked.append(otu)
+            picked_tax.append(map_dict[otu])
+    return picked, picked_tax
+
+def pick_for_two(tree, node1, node2, map_dict, num):
+    picked_1 = []
+    picked_tax_1 = []
+    picked_2 = []
+    picked_tax_2 = []
+    pickable = list(map_dict.keys())
+    random.shuffle(pickable)
+    if len(pickable) < num*2:
+        print("not enough to pick from")
+        return
+    print(node1.get_distance(node2))
+    while len(picked_1) < num and len(picked_2) < num:
+        node = pickable.pop()
+        if node1.get_distance(tree&node) < node2.get_distance(tree&node):
+            picked_1.append(node)
+            picked_tax_1.append(map_dict[node])
+        else:
+            picked_2.append(node)
+            picked_tax_2.append(map_dict[node])
+        print("length of picked_1 is %d" %len(picked_1))
+        print("length of picked_2 is %d" %len(picked_2))
+    while len(picked_2) < num: #will only execute if picked_2 is not filled yet
+        node = pickable.pop()
+        if node2.get_distance(tree&node) < node1.get_distance(tree&node):
+            picked_2.append(node)
+            picked_tax_2.append(map_dict[node])
+            print("length of picked_2 is %d" % len(picked_2))
+    while len(picked_1) < num: #will only execute if picked_1 is not filled yet
+        node = pickable.pop()
+        if node1.get_distance(tree&node) < node2.get_distance(tree&node):
+            picked_1.append(node)
+            picked_tax_1.append(map_dict[node])
+            print("length of picked_1 is %d" % len(picked_1))
+    return picked_1, picked_tax_1, picked_2, picked_tax_2
 
 def create_biom_table(sample_metadata, table_id, data, filename):
     '''
@@ -161,6 +210,51 @@ def _check_rank_list(id_list):
             id_list[i] = np.nan
     return id_list
 
+def search_by_distance(tree, node, pickable_list, dist):
+    '''
+    search for all the nodes within the distance dist from the node, all pickable
+    :param node:
+    :param dist:
+    :return:
+    '''
+    if type(node) == str:
+        node = tree&node
+    match = []
+    for n in pickable_list:
+        print(node.get_distance(tree&n))
+        if node.get_distance(tree&n) <= dist:
+            match.append(n)
+    print("%d pickable nodes within distance %d" %len(match) %dist)
+    return match
+
+def create_data(num_sam, tree, num_org, map_dict):
+    '''
+    return a dictionary consisting of num_env environments, with num_sam samples each
+    :param num_env:
+    :param num_sam:
+    :return:
+    '''
+    otu_dict = dict()
+    taxid_dict = dict()
+    node1 = random.choice(tree.get_leaves())
+    node2 = random.choice(tree.get_leaves())
+    while node1.get_distance(node2) < 2.5:
+        node1 = random.choice(tree.get_leaves())
+        node2 = random.choice(tree.get_leaves())
+    print(node1, node2)
+    for i in range(num_sam):
+        print("creating sample round %d" %i)
+        env1_otu_key = "{}{}".format('env1sam', i)
+        env2_otu_key = "{}{}".format('env2sam', i)
+        (env1otu, env1tax, env2otu, env2tax) = pick_for_two(tree, node1, node2, map_dict, num_org)
+        otu_dict.update({env1_otu_key:env1otu})
+        otu_dict.update({env2_otu_key:env2otu})
+        taxid_dict.update({env1_otu_key: env1tax})
+        taxid_dict.update({env2_otu_key: env2tax})
+    return otu_dict, taxid_dict
+
+#def create_metadata(data):
+
 
 def test_merge():
     '''
@@ -178,47 +272,10 @@ if __name__ == '__main__':
     (T, l, nodes) = unifrac.parse_tree_file('../gg/gg_13_5_otus/trees/99_otus.tree')
     tree = ete3.TreeNode('../gg/gg_13_5_otus/trees/99_otus.tree', format=1, quoted_node_names=True)
     otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
-    pickable_otu = list(otu_tax_dict.keys())
-    node1 = random.choice(tree.get_leaves())
-    node2 = random.choice(tree.get_leaves())
-    node3 = random.choice(tree.get_leaves())
-    print(node1.get_distance(node2))
-    print(node2.get_distance(node3))
-    print(node1.get_distance(node3))
-    comm_an12 = tree.get_common_ancestor(node1, node2)
-    comm_an23 = tree.get_common_ancestor(node2, node3)
-    comm_an13 = tree.get_common_ancestor(node1, node3)
-    env1sam1 = {'env1sam1': pick_otu(comm_an12, otu_tax_dict, 50)}
-    env1sam2 = {'env1sam2': pick_otu(comm_an12, otu_tax_dict, 50)}
-    env1sam3 = {'env1sam3': pick_otu(comm_an12, otu_tax_dict, 50)}
-    env1sam4 = {'env1sam4': pick_otu(comm_an12, otu_tax_dict, 50)}
-    env1sam5 = {'env1sam5': pick_otu(comm_an12, otu_tax_dict, 50)}
-    env2sam1 = {'env2sam1': pick_otu(comm_an23, otu_tax_dict, 50)}
-    env2sam2 = {'env2sam2': pick_otu(comm_an23, otu_tax_dict, 50)}
-    env2sam3 = {'env2sam3': pick_otu(comm_an23, otu_tax_dict, 50)}
-    env2sam4 = {'env2sam4': pick_otu(comm_an23, otu_tax_dict, 50)}
-    env2sam5 = {'env2sam5': pick_otu(comm_an23, otu_tax_dict, 50)}
-    env3sam1 = {'env3sam1': pick_otu(comm_an13, otu_tax_dict, 50)}
-    env3sam2 = {'env3sam2': pick_otu(comm_an13, otu_tax_dict, 50)}
-    env3sam3 = {'env3sam3': pick_otu(comm_an13, otu_tax_dict, 50)}
-    env3sam4 = {'env3sam4': pick_otu(comm_an13, otu_tax_dict, 50)}
-    env3sam5 = {'env3sam5': pick_otu(comm_an13, otu_tax_dict, 50)}
-    data = dict()
-    data.update(env1sam1)
-    data.update(env1sam2)
-    data.update(env1sam3)
-    data.update(env1sam4)
-    data.update(env1sam5)
-    data.update(env2sam1)
-    data.update(env2sam2)
-    data.update(env2sam3)
-    data.update(env2sam4)
-    data.update(env2sam5)
-    data.update(env3sam1)
-    data.update(env3sam2)
-    data.update(env3sam3)
-    data.update(env3sam4)
-    data.update(env3sam5)
     os.chdir('../gg_test_2')
+    #pickable_otu = list(otu_tax_dict.keys())
+    (data, taxdata) = create_data(25, tree, 200, otu_tax_dict)
     create_biom_table('meta', 'gg_test2', data, 'gg_test2.biom')
-    #test_merge()
+    for key, value in list(taxdata.items()):
+        filename = "{}{}".format(key, '.profile')
+        pf.create_profile(value, 'profiles', filename)
