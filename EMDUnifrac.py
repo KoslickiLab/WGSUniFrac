@@ -219,6 +219,27 @@ def get_branch_length_function(function_str):
         logging.getLogger('opal').warning('Invalid function provided with -b, --branch_length_function: {}. lambda x: 1/x will be used.'.format(exception.msg))
         return eval('lambda x: 1/float(x)')
 
+def EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q):
+    '''
+    (Z, diffab) = EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
+    This function takes the ancestor dictionary Tint, the lengths dictionary lint, the basis nodes_in_order
+    and two probability vectors P and Q (typically P = envs_prob_dict[samples[i]], Q = envs_prob_dict[samples[j]]).
+    Returns the weighted Unifrac distance Z and the flow F. The flow F is a dictionary with keys of the form (i,j) where
+    F[(i,j)] == num means that in the calculation of the Unifrac distance, a total mass of num was moved from the node
+    nodes_in_order[i] to the node nodes_in_order[j].
+    '''
+    num_nodes = len(nodes_in_order)
+    Z = 0
+    diffab = dict()
+    partial_sums = P - Q
+    for i in range(num_nodes - 1):
+        val = partial_sums[i]
+        partial_sums[Tint[i]] += val
+        if val != 0:
+            diffab[(i, Tint[i])] = lint[i, Tint[i]] * val  # Captures diffab
+        Z += lint[i, Tint[i]] * abs(val)
+    return (Z, diffab)
+
 #(Tint, lint, nodes_in_order) = parse_tree('((D:0.1,C:0.1)F:0.2,(B:0.1,A:0.1)E:0.2)G;')
 #P = np.array([0, 1.0/2, 1.0/2, 0, 0, 0, 0])
 #Q = np.array([1.0/3, 0, 0, 1.0/3, 0, 1.0/3, 0])
