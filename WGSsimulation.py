@@ -21,6 +21,11 @@ def pairwise_unifrac(dir):
     file_lst = os.listdir(dir) #list files in the directory
     os.chdir(dir)
     sample_lst = [os.path.splitext(profile)[0] for profile in file_lst] #remove extension
+    #create metadata
+    metadata = dict()
+    for name in sample_lst:
+        env = name[3]
+        metadata[name] = {'environment': env}
     # enumerate sample_lst, for filling matrix
     id_dict = dict()
     for i, id in enumerate(file_lst):
@@ -41,22 +46,24 @@ def pairwise_unifrac(dir):
         (weighted, _) = unifrac.EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
         dist_matrix[i][j] = dist_matrix[j][i] = weighted
     os.chdir(cur_dir)
-    return sample_lst, dist_matrix
+    return sample_lst, dist_matrix, metadata
 
-
-if __name__ == '__main__':
-
-    (id, dist_matrix) = pairwise_unifrac('data/gg_profile_test')
-    print(id, dist_matrix)
-    metadata = {
-        'gg_test1':{'environment': 'A'},
-        'gg_test2':{'environment': 'A'},
-        'gg_test3':{'environment': 'B'},
-        'gg_test4':{'environment': 'B'}
-    }
+def get_plot_from_exported(matrix_file):
+    distance_matrix = pd.read_csv(matrix_file, sep='\t', header=0, index_col=0)
+    sample_lst = list(distance_matrix.columns)
+    metadata = dict()
+    for name in sample_lst:
+        env = name[3]
+        metadata[name] = {'environment': env}
     df = pd.DataFrame.from_dict(metadata, orient='index')
-    dm = DistanceMatrix(dist_matrix, id)
+    dm = DistanceMatrix(distance_matrix, sample_lst)
     dist_pc = pcoa(dm)
     dist_pc.plot(df=df, column="environment", cmap='Set1')
     plt.show()
+
+
+if __name__ == '__main__':
+    get_plot_from_exported('data/gg_test_2/distance-matrix.tsv')
+
+
 
