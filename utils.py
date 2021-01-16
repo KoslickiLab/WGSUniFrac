@@ -6,6 +6,7 @@ import numpy as np
 import EMDUnifrac as unifrac
 from biom import Table
 import ete3
+from copy import deepcopy
 
 def write_list_to_file(file, lst):
     with open(file, 'w') as f:
@@ -210,7 +211,7 @@ def _check_rank_list(id_list):
             id_list[i] = np.nan
     return id_list
 
-def search_by_distance(tree, node, pickable_list, dist):
+def search_by_distance(tree, node, map_dict, dist, num):
     '''
     search for all the nodes within the distance dist from the node, all pickable
     :param node:
@@ -220,12 +221,17 @@ def search_by_distance(tree, node, pickable_list, dist):
     if type(node) == str:
         node = tree&node
     match = []
-    for n in pickable_list:
-        print(node.get_distance(tree&n))
-        if node.get_distance(tree&n) <= dist:
+    match_taxid = []
+    pickable_copy = deepcopy(list(map_dict.keys()))
+    random.shuffle(pickable_copy)
+    while len(match) < num and len(pickable_copy)>0:
+        n = pickable_copy.pop()
+        if node.get_distance(tree&n) <= dist
             match.append(n)
-    print("%d pickable nodes within distance %d" %len(match) %dist)
-    return match
+            match_taxid.append(map_dict[n])
+    if len(match) < num:
+        print("%d pickable nodes within distance %d" %len(match) %dist)
+    return match, match_taxid
 
 def create_data(num_sam, tree, num_org, map_dict):
     '''
@@ -242,11 +248,13 @@ def create_data(num_sam, tree, num_org, map_dict):
         node1 = random.choice(tree.get_leaves())
         node2 = random.choice(tree.get_leaves())
     print(node1, node2)
+    dist = node1.get_distance(node2)/2.0
     for i in range(num_sam):
         print("creating sample round %d" %i)
         env1_otu_key = "{}{}".format('env1sam', i)
         env2_otu_key = "{}{}".format('env2sam', i)
-        (env1otu, env1tax, env2otu, env2tax) = pick_for_two(tree, node1, node2, map_dict, num_org)
+        (env1otu, env1tax) = search_by_distance(tree, node1, map_dict, dist, num_org)
+        (env2otu, env2tax) = search_by_distance(tree, node1, map_dict, dist, num_org)
         otu_dict.update({env1_otu_key:env1otu})
         otu_dict.update({env2_otu_key:env2otu})
         taxid_dict.update({env1_otu_key: env1tax})
@@ -266,6 +274,7 @@ def test_merge():
     acc_taxid_df = pd.read_table('test_merge_taxid.txt', header=None, usecols=[0,1], dtype=str)
     merged_df = otu_acc_df.merge(acc_taxid_df, left_on=1, right_on=0)
     print(merged_df)
+
 
 if __name__ == '__main__':
     os.chdir('data/taxid_otu_conversion')
