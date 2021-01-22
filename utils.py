@@ -279,14 +279,17 @@ def test_merge():
 
 
 if __name__ == '__main__':
-    os.chdir('data/taxid_otu_conversion')
-    (T, l, nodes) = unifrac.parse_tree_file('../gg/gg_13_5_otus/trees/99_otus.tree')
-    tree = ete3.TreeNode('../gg/gg_13_5_otus/trees/99_otus.tree', format=1, quoted_node_names=True)
+    #os.chdir('data/taxid_otu_conversion')
+    #(T, l, nodes) = unifrac.parse_tree_file('../gg/gg_13_5_otus/trees/99_otus.tree')
+    (T, l, nodes) = unifrac.parse_tree_file('99_otus.tree')
+    #tree = ete3.TreeNode('../gg/gg_13_5_otus/trees/99_otus.tree', format=1, quoted_node_names=True)
+    tree = ete3.TreeNode('99_otus.tree', format=1, quoted_node_names=True)
     otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
-    os.chdir('../gg_test_2')
+    #os.chdir('../gg_test_2')
     #pickable_otu = list(otu_tax_dict.keys())
-    (data, taxdata) = create_data(25, tree, 2.5/2, 200, otu_tax_dict)
-    create_biom_table('meta', 'gg_test2', data, 'gg_test2.tsv')
+    (data, taxdata) = create_data(25, tree, 1, 200, otu_tax_dict)
+    create_biom_table('meta', 'gg_test', data, 'gg_test.tsv')
+    #only if needs profiles to be created at the same time
     for key, value in list(taxdata.items()):
         filename = "{}{}".format(key, '.profile')
         pf.create_profile(value, 'profiles', filename)
