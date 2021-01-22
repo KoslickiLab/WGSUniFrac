@@ -10,6 +10,7 @@ import itertools as it
 from skbio import TreeNode
 from skbio.stats.ordination import pcoa
 from skbio import DistanceMatrix
+import math
 
 def pairwise_unifrac(dir):
     '''
@@ -46,7 +47,12 @@ def pairwise_unifrac(dir):
         (weighted, _) = unifrac.EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
         dist_matrix[i][j] = dist_matrix[j][i] = weighted
     os.chdir(cur_dir)
-    return sample_lst, dist_matrix, metadata
+    df = pd.DataFrame.from_dict(metadata, orient='index')
+    dm = DistanceMatrix(dist_matrix, sample_lst)
+    dist_pc = pcoa(dm)
+    dist_pc.plot(df=df, column="environment", cmap="Set1")
+    plt.show()
+    #return sample_lst, dist_matrix, metadata
 
 def get_plot_from_exported(matrix_file):
     distance_matrix = pd.read_csv(matrix_file, sep='\t', header=0, index_col=0)
@@ -63,7 +69,8 @@ def get_plot_from_exported(matrix_file):
 
 
 if __name__ == '__main__':
-    get_plot_from_exported('data/gg_test_2/distance-matrix.tsv')
+    get_plot_from_exported('data/gg_test_4/distance-matrix.tsv')
+    #pairwise_unifrac('data/gg_test_3/profiles')
 
 
 
