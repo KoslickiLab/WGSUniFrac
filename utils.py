@@ -225,15 +225,16 @@ def search_by_distance(tree, node, map_dict, dist, num):
     pickable_copy = deepcopy(list(map_dict.keys()))
     random.shuffle(pickable_copy)
     while len(match) < num and len(pickable_copy)>0:
-        n = pickable_copy.pop()
+        n = pickable_copy.pop():q
         if node.get_distance(tree&n) <= dist
             match.append(n)
+            print(len(match))
             match_taxid.append(map_dict[n])
     if len(match) < num:
         print("%d pickable nodes within distance %d" %len(match) %dist)
     return match, match_taxid
 
-def create_data(num_sam, tree, num_org, map_dict):
+def create_data(num_sam, tree, dist, num_org, map_dict):
     '''
     return a dictionary consisting of num_env environments, with num_sam samples each
     :param num_env:
@@ -248,7 +249,7 @@ def create_data(num_sam, tree, num_org, map_dict):
         node1 = random.choice(tree.get_leaves())
         node2 = random.choice(tree.get_leaves())
     print(node1, node2)
-    dist = node1.get_distance(node2)/2.0
+    print(node1.get_distance(node2))
     for i in range(num_sam):
         print("creating sample round %d" %i)
         env1_otu_key = "{}{}".format('env1sam', i)
@@ -276,6 +277,7 @@ def test_merge():
     print(merged_df)
 
 
+
 if __name__ == '__main__':
     os.chdir('data/taxid_otu_conversion')
     (T, l, nodes) = unifrac.parse_tree_file('../gg/gg_13_5_otus/trees/99_otus.tree')
@@ -283,8 +285,8 @@ if __name__ == '__main__':
     otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
     os.chdir('../gg_test_2')
     #pickable_otu = list(otu_tax_dict.keys())
-    (data, taxdata) = create_data(25, tree, 200, otu_tax_dict)
-    create_biom_table('meta', 'gg_test2', data, 'gg_test2.biom')
+    (data, taxdata) = create_data(25, tree, 2.5/2, 200, otu_tax_dict)
+    create_biom_table('meta', 'gg_test2', data, 'gg_test2.tsv')
     for key, value in list(taxdata.items()):
         filename = "{}{}".format(key, '.profile')
         pf.create_profile(value, 'profiles', filename)
