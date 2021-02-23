@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import sys
 from ete3 import NCBITaxa
+from utils import *
 ncbi = NCBITaxa()
 
 
@@ -467,7 +468,15 @@ class Profile(object):
         return Tint2, lint2, nodes_in_order2, nodes_to_index, P / 100., Q / 100.
 
 
-def create_profile(id_list, outdir, filename):
+def create_profile(node_list, outdir, filename):
+    '''
+
+    :param node_list: list of Node objects
+    :param outdir:
+    :param filename:
+    :return:
+    '''
+    id_list = list(map(lambda x:x.tax, node_list))
     filtered_list = filter_id_list(id_list)
     if len(filtered_list) == 0:
         print("nothing is left.")
@@ -481,8 +490,25 @@ def create_profile(id_list, outdir, filename):
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
             "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
-    perc = 1. / len(filtered_list) * 100
+    #update abundance information
     for id in filtered_list:
+        lin_list = ncbi.get_lineage(id)
+        lin_dict = ncbi.get_rank(lin_list)
+        lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
+        rank_list.reverse() #species, genus, family, etc
+        species_node = _get_node_from_taxid(id, node_list)
+        cur_abund = species_node.abundance
+        for rank in rank_list:
+            cur_taxid = lin_dict_reverse[rank]
+            cur_node = _get_node_from_taxid(cur_taxid, node_list)
+            if cur_node is None:
+                cur_node = Node(name=rank+cur_taxid, tax=cur_taxid)
+                node_list.append(cur_node)
+            cur_node.abundance = cur_node.abundance+cur_abund
+            cur_abund = cur_node.abundance
+    rank_list.reverse()
+    #print out
+    for x, id in enumerate(filtered_list,1):
         lin_list = ncbi.get_lineage(id)  # get lineage
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
@@ -491,6 +517,7 @@ def create_profile(id_list, outdir, filename):
         for rank in rank_list:
             taxid = lin_dict_reverse[rank]
             name = ncbi.get_taxid_translator([taxid])[taxid]
+            cur_node = _get_node_from_taxid(taxid, node_list)
             if len(taxpath) == 0:
                 taxpath += str(taxid)
             else:
@@ -499,10 +526,16 @@ def create_profile(id_list, outdir, filename):
                 namepath += name
             else:
                 namepath = namepath + "|" + name
-            f.writelines([str(taxid), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(perc)])
+            f.writelines([str(taxid), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(cur_node.abundance)])
             f.write("\n")
     f.close()
     return
+
+def _get_node_from_taxid(taxid, node_list):
+    for node in node_list:
+        print(node.tax)
+        if node.tax == taxid:
+            return node
 
 def filter_id_list(id_list):
     filtered_list = []
