@@ -490,25 +490,28 @@ def create_profile(node_list, outdir, filename):
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
             "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
+    rank_list.reverse()
     #update abundance information
     for id in filtered_list:
         lin_list = ncbi.get_lineage(id)
         lin_dict = ncbi.get_rank(lin_list)
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
-        rank_list.reverse() #species, genus, family, etc
-        species_node = _get_node_from_taxid(id, node_list)
-        cur_abund = species_node.abundance
-        for rank in rank_list:
+        cur_node = _get_node_from_taxid(id, node_list)
+        cur_abund = cur_node.abundance
+        for rank in rank_list[1:]:
             cur_taxid = lin_dict_reverse[rank]
             cur_node = _get_node_from_taxid(cur_taxid, node_list)
             if cur_node is None:
-                cur_node = Node(name=rank+cur_taxid, tax=cur_taxid)
+                cur_node = Node(name=rank+str(cur_taxid), tax=cur_taxid)
                 node_list.append(cur_node)
             cur_node.abundance = cur_node.abundance+cur_abund
-            cur_abund = cur_node.abundance
+            #cur_abund = cur_node.abundance
     rank_list.reverse()
+    print(len(node_list))
+    for node in node_list:
+        print(node.tax)
     #print out
-    for x, id in enumerate(filtered_list,1):
+    for id in filtered_list:
         lin_list = ncbi.get_lineage(id)  # get lineage
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
@@ -518,6 +521,7 @@ def create_profile(node_list, outdir, filename):
             taxid = lin_dict_reverse[rank]
             name = ncbi.get_taxid_translator([taxid])[taxid]
             cur_node = _get_node_from_taxid(taxid, node_list)
+            print(taxid)
             if len(taxpath) == 0:
                 taxpath += str(taxid)
             else:
@@ -533,8 +537,8 @@ def create_profile(node_list, outdir, filename):
 
 def _get_node_from_taxid(taxid, node_list):
     for node in node_list:
-        print(node.tax)
         if node.tax == taxid:
+            print("found")
             return node
 
 def filter_id_list(id_list):
@@ -788,3 +792,8 @@ def test_no_normalize():
     correct_vals = {'0': 0.10, '1': 0.50, '2': 0.20, '3': 0.0, '4': 0.10, '5': 0.00}
     for key, val in correct_vals.items():
         assert P[nodes_to_index[key]] == val
+
+def test_create_profile():
+    org1 = Node(name="org1", tax=33936, abundance=20)
+    org2 = Node(name="org2", tax=499124, abundance=80)
+    create_profile([org1, org2], "data", "test_create_profile")
