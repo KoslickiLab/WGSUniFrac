@@ -477,7 +477,10 @@ def create_profile(node_list, outdir, filename):
     :return:
     '''
     id_list = list(map(lambda x:x.tax, node_list))
+    print("length before filtering is %s " %len(id_list))
     filtered_list = filter_id_list(id_list)
+    filtered_list = list(map(int, filtered_list))
+    print("length after filtering is %s " % len(filtered_list))
     if len(filtered_list) == 0:
         print("nothing is left.")
         return
@@ -492,12 +495,28 @@ def create_profile(node_list, outdir, filename):
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
     rank_list.reverse()
     #update abundance information
+    print("all your nodes are here: ")
+    print(id_list)
+    print("plus your filtered nodes")
+    print(filtered_list)
     for id in filtered_list:
-        lin_list = ncbi.get_lineage(id)
-        lin_dict = ncbi.get_rank(lin_list)
+        print("Im looking for %s" % id)
+        lin_list = ncbi.get_lineage(id)  # get lineage
+        print("let's see the lineage...")
+        print(lin_list)
+        lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
+        print("now let's see the dict")
+        print(lin_dict)
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
+        print("how is the reverse dict")
+        print(lin_dict_reverse)
+        if id != lin_list[-1]:
+            id = lin_list[-1]
         cur_node = _get_node_from_taxid(id, node_list)
         cur_abund = cur_node.abundance
+        if lin_dict[id] != 'species':
+            new_node = Node(name='species'+str(id), tax=lin_dict_reverse['species'], abundance=cur_abund)
+            node_list.append(new_node)
         for rank in rank_list[1:]:
             cur_taxid = lin_dict_reverse[rank]
             cur_node = _get_node_from_taxid(cur_taxid, node_list)
@@ -507,20 +526,26 @@ def create_profile(node_list, outdir, filename):
             cur_node.abundance = cur_node.abundance+cur_abund
             #cur_abund = cur_node.abundance
     rank_list.reverse()
-    print(len(node_list))
-    for node in node_list:
-        print(node.tax)
     #print out
     for id in filtered_list:
+        print("Im looking for %s" %id)
         lin_list = ncbi.get_lineage(id)  # get lineage
+        print("let's see the lineage...")
+        print(lin_list)
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
+        print("now let's see the dict")
+        print(lin_dict)
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
+        print("how is the reverse dict")
+        print(lin_dict_reverse)
         taxpath = ""
         namepath = ""
         for rank in rank_list:
             taxid = lin_dict_reverse[rank]
             name = ncbi.get_taxid_translator([taxid])[taxid]
             cur_node = _get_node_from_taxid(taxid, node_list)
+            if cur_node is None:
+                print("%s not found" %taxid)
             print(taxid)
             if len(taxpath) == 0:
                 taxpath += str(taxid)
@@ -537,8 +562,7 @@ def create_profile(node_list, outdir, filename):
 
 def _get_node_from_taxid(taxid, node_list):
     for node in node_list:
-        if node.tax == taxid:
-            print("found")
+        if int(node.tax) == int(taxid):
             return node
 
 def filter_id_list(id_list):
@@ -795,5 +819,15 @@ def test_no_normalize():
 
 def test_create_profile():
     org1 = Node(name="org1", tax=33936, abundance=20)
-    org2 = Node(name="org2", tax=499124, abundance=80)
-    create_profile([org1, org2], "data", "test_create_profile")
+    org2 = Node(name="org2", tax=499124, abundance=70)
+    org3 = Node(name="org3", tax=187074, abundance=10)
+    create_profile([org1, org2, org3], "data", "test_create_profile")
+
+def test_create_profile2():
+    nodes = ['469382', '797114', '596418', '2238', '573064', '145261', '268735', '29283', '1269828', '1269822', '1071726', '1230459', '329270', '1071739', '588898', '565033', '260463', '65421', '226001', '662480', '399555', '218300', '547559', '1089732', '1427151', '376171', '227597', '660064', '596424', '2242', '1053642', '329270', '869889', '332953', '260463', '585975', '638771', '1073081', '183759', '29282', '797209', '1126238', '489912', '768065', '399555', '755311', '2265', '1230452', '744725', '869888', '2261', '692267', '329270', '1200261', '29282', '485914', '797114', '90909', '1227487', '867904', '575194', '1214227', '797210', '453848', '1269874', '1195987', '575194', '1195984', '391623', '329270', '1269883', '260463', '399555', '183759', '404323', '267435', '425309', '114529', '717756', '1230457', '1198296', '1132509', '392421', '869886', '553467', '51589', '523846', '362891', '655464', '797303', '302484', '575195', '869887', '755311', '254206', '1017351', '268739', '2238', '61858', '523841', '43928', '1017351', '872320', '51589', '38025', '218300', '869891', '1261545', '1224621', '2238', '1269884', '1269850', '267446', '1126245', '370324', '51589', '536044', '328406', '1269835', '36738', '643748', '572546', '1126240', '504937', '1126237', '2226', '797114', '186057', '262078', '340952', '46540', '57705', '627958', '589924', '310771', '370967', '178600', '1089758', '113653', '268735', '751944', '88724', '399555', '1008196', '406551', '286152', '261291', '1053639', '195522', '329275', '88724', '399555', '231715', '160432', '699431', '267368', '328406', '335951', '558529', '1269825', '329272', '329270', '1224623', '396317', '647171', '699433', '29284', '420995', '323742', '217171', '1269863', '399555', '588319', '638774', '481736', '54262', '755307', '425309', '641561', '155321', '1109010', '1220023', '28442', '183759', '1095778', '213231', '981621', '1198324', '436949', '110163', '69493', '596417', '1158307', '406549', '229731', '122420', '260463', '1121009', '371024', '869886']
+
+    real_nodes = []
+    for org in nodes:
+        real_node = Node(name=str(org), tax=int(org), abundance=0.5)
+        real_nodes.append(real_node)
+    create_profile(real_nodes, "data", "test_create_profile2.profile")
