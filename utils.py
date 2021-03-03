@@ -299,9 +299,18 @@ def create_data(num_sam, tree, dist, num_org, map_dict, enough):
     return otu_dict, taxid_dict
 
 
-def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dict):
+def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dict, similarity=-1):
+    '''
+    :param num_org: number of organisms per sample
+    :param num_sample: number of samples per environment
+    :param sample_range: the spread of sample
+    :param similarity: how close are the two nodes chosen
+    :param distance_dict:
+    :param tax_dict:
+    :return:
+    '''
     node1 = random.choice(list(distance_dict.keys()))
-    node2 = distance_dict[node1][-1]
+    node2 = distance_dict[node1][similarity]
     print(node1)
     print(node2)
     data_dict = dict()
@@ -311,9 +320,13 @@ def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dic
     for i, node in enumerate(env1_nodes):
         #create Nodes, update tax
         new_node = Node(name=node, tax=tax_dict[node])
+        if int(new_node.tax) != pf.ncbi.get_lineage(new_node.tax)[-1]:
+            new_node.tax = pf.ncbi.get_lineage(new_node.tax)[-1]
         env1_nodes[i] = new_node
     for i, node in enumerate(env2_nodes):
         new_node = Node(name=node, tax=tax_dict[node])
+        if int(new_node.tax) != pf.ncbi.get_lineage(new_node.tax)[-1]:
+            new_node.tax = pf.ncbi.get_lineage(new_node.tax)[-1]
         env2_nodes[i] = new_node
     #create sample
     if num_org >= sample_range:
@@ -351,7 +364,7 @@ def create_biom_table(sample_metadata, table_id, data, filename, normalize=False
         value_name = list(map(lambda x: x.name, value))
         otus = otus + value_name
         for x, node in enumerate(value):
-            ab = 1. / (2 ** x)
+            ab = 100. / (2 ** x)
             ab = ab + np.random.normal(1)
             if ab < 0:
                 ab = sys.float_info.epsilon
@@ -487,8 +500,11 @@ def test_merge():
 
 
 if __name__ == '__main__':
-    distance_dict = get_dict('data/sorted_distance_complete.txt')
+    #distance_dict = get_dict('data/sorted_distance_complete.txt')
     (tree, otu_tax_dict) = setup()
+    test_type = random.choice(list(otu_tax_dict.keys()))
+    test_tax = otu_tax_dict[test_type]
+    print(type(test_tax))
     # (data, taxdata) = create_data(1, tree, 0.8, 100, otu_tax_dict, 120)
     # create_biom_table('meta', 'test_1sample', data, 'test_1sample.tsv', False)
     # only if needs profiles to be created at the same time
