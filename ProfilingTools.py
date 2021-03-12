@@ -493,6 +493,9 @@ def create_profile(node_list, outdir, filename):
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
             "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
     rank_list = (["superkingdom", "phylum", "class", "order", "family", "genus", "species"])
+    rank_dict = dict()
+    for rank in rank_list:
+        rank_dict[rank] = []
     rank_list.reverse()
     #update abundance information
     print("all your nodes are here: ")
@@ -510,13 +513,14 @@ def create_profile(node_list, outdir, filename):
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
         print("how is the reverse dict")
         print(lin_dict_reverse)
-        if id != lin_list[-1]:
+        if id != lin_list[-1]: #in case the id is obsolete and translated to another
             id = lin_list[-1]
         cur_node = _get_node_from_taxid(id, node_list)
         cur_abund = cur_node.abundance
         if lin_dict[id] != 'species':
             new_node = Node(name='species'+str(id), tax=lin_dict_reverse['species'], abundance=cur_abund)
             node_list.append(new_node)
+            rank_dict["species"].append(new_node)
         for rank in rank_list[1:]:
             cur_taxid = lin_dict_reverse[rank]
             cur_node = _get_node_from_taxid(cur_taxid, node_list)
@@ -524,38 +528,27 @@ def create_profile(node_list, outdir, filename):
                 cur_node = Node(name=rank+str(cur_taxid), tax=cur_taxid)
                 node_list.append(cur_node)
             cur_node.abundance = cur_node.abundance+cur_abund
+            if cur_node not in rank_dict[rank]:
+                rank_dict[rank].append(cur_node)
             #cur_abund = cur_node.abundance
     rank_list.reverse()
     #print out
-    for id in filtered_list:
-        print("Im looking for %s" %id)
-        lin_list = ncbi.get_lineage(id)  # get lineage
-        print("let's see the lineage...")
-        print(lin_list)
-        lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
-        print("now let's see the dict")
-        print(lin_dict)
-        lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
-        print("how is the reverse dict")
-        print(lin_dict_reverse)
-        taxpath = ""
-        namepath = ""
-        for rank in rank_list:
-            taxid = lin_dict_reverse[rank]
-            name = ncbi.get_taxid_translator([taxid])[taxid]
-            cur_node = _get_node_from_taxid(taxid, node_list)
-            if cur_node is None:
-                print("%s not found" %taxid)
-            print(taxid)
-            if len(taxpath) == 0:
-                taxpath += str(taxid)
-            else:
+    for rank in rank_list:
+        rank_pos = rank_list.index(rank)
+        for node in rank_dict[rank]:
+            lin_list = ncbi.get_lineage(node.tax)
+            lin_dict = ncbi.get_rank(lin_list)
+            lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
+            superkingdom = lin_dict_reverse["superkingdom"]
+            taxpath = str(superkingdom)
+            namepath = ncbi.get_taxid_translator([superkingdom])[superkingdom]
+            for r in rank_list[1:rank_pos+1]:
+                taxid = lin_dict_reverse[r]
                 taxpath = taxpath + "|" + str(taxid)
-            if len(namepath) == 0:
-                namepath += name
-            else:
+                name = ncbi.get_taxid_translator([taxid])[taxid]
+                cur_node = _get_node_from_taxid(taxid, node_list)
                 namepath = namepath + "|" + name
-            f.writelines([str(taxid), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(cur_node.abundance)])
+            f.writelines([str(node.tax), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(cur_node.abundance)])
             f.write("\n")
     f.close()
     return
