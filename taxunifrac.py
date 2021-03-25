@@ -1,15 +1,19 @@
 import os
 import logging
 from collections import defaultdict
-from ete3 import NCBITaxa, TreeNode
+from ete3 import NCBITaxa
 import copy
 import numpy as np
 import dendropy
 from biom import Table
 import pandas as pd
 import random
-import sys
+import seaborn as sns
 from scipy.stats import halfnorm
+from skbio import DistanceMatrix #to install: pip install scikit-bio
+from sklearn.metrics import silhouette_score
+import re
+import itertools as it
 ncbi = NCBITaxa()
 
 
@@ -835,13 +839,12 @@ def EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q):
 def setup(return_dist_dict=False):
     os.chdir('data')
     (T, l, nodes) = parse_tree_file('99_otus.tree')
-    tree = TreeNode('99_otus.tree', format=1, quoted_node_names=True)
     otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
     if return_dist_dict is True:
-        distance_dict = get_dist_dict('data/sorted_distance_mini.txt')
-        return (tree, otu_tax_dict, distance_dict)
+        distance_dict = get_dist_dict('sorted_distance_complete.txt')
+        return (otu_tax_dict, distance_dict)
     else:
-        return (tree, otu_tax_dict)
+        return (otu_tax_dict)
 
 def get_dist_dict(file):
     '''
@@ -889,9 +892,9 @@ def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dic
     :return:
     '''
     node1 = random.choice(list(distance_dict.keys()))
-    #node2 = distance_dict[node1][similarity]
+    node2 = distance_dict[node1][similarity]
     #for test only
-    node2 = random.choice(list(distance_dict.keys()))
+    #node2 = random.choice(list(distance_dict.keys()))
     print(node1)
     print(node2)
     data_dict = dict()
@@ -959,7 +962,7 @@ def create_biom_table(table_id, data, filename, normalize=False):
     normed = table.norm(axis='sample', inplace=False)
     for key, value in list(data.items()):
         for node in value:
-            node.abundance = normed.get_value_by_ids(node.name, key)
+            node.abundance = normed.get_value_by_ids(node.name, key) * 100
     with open(filename, "w") as f:
         if normalize:
             normed.to_tsv(direct_io=f)
@@ -967,6 +970,113 @@ def create_biom_table(table_id, data, filename, normalize=False):
             table.to_tsv(direct_io=f)
     return data
 
+def run_one(dist_dict, tax_dict, num_org, num_sample, range, similarity, run):
+    #create directory
+    cur_dir = os.getcwd()
+    dir_name = "range" + str(range) + "dist" + str(similarity) + "run" + str(run)
+    if os.path.exists(dir_name):
+        print("directory exists")
+        return
+    os.mkdir(dir_name)
+    os.chdir(dir_name)
+    data = create_data_simple(num_org=num_org, num_sample=num_sample, sample_range=range,
+                              similarity=similarity, distance_dict=dist_dict, tax_dict=tax_dict)
+    updated_data = create_biom_table(dir_name, data, 'otu_table.tsv', True)
+    os.mkdir("profiles")
+    for key, value in list(updated_data.items()):
+        filename = "{}{}".format(key, '.profile')
+        create_profile(value, 'profiles', filename)
+    os.chdir(cur_dir)
+
+def pairwise_unifrac(dir):
+    '''
+    Computes pairwise unifrac distance among profiles in a given directory
+    :param dir: a directory containing profile files
+    :return: a matrix of pairwise distances
+    '''
+    cur_dir = os.getcwd()
+    file_lst = os.listdir(dir) #list files in the directory
+    os.chdir(dir)
+    sample_lst = [os.path.splitext(profile)[0] for profile in file_lst] #remove extension
+    #create metadata
+    metadata = dict()
+    for name in sample_lst:
+        env = name[3]
+        metadata[name] = {'environment': env}
+    # enumerate sample_lst, for filling matrix
+    id_dict = dict()
+    for i, id in enumerate(file_lst):
+        id_dict[id] = i
+    #initialize matrix
+    dim = len(file_lst)
+    dist_matrix = np.zeros(shape=(dim, dim))
+    for pair in it.combinations(file_lst, 2):
+        id_1,id_2 = pair[0], pair[1]
+        i,j = id_dict[id_1], id_dict[id_2]
+        profile_list1 = open_profile_from_tsv(id_1, False)
+        profile_list2 = open_profile_from_tsv(id_2, False)
+        name1, metadata1, profile1 = profile_list1[0]
+        name2, metadata2, profile2 = profile_list2[0]
+        profile1 = Profile(sample_metadata=metadata1, profile=profile1, branch_length_fun=lambda x: 1/x)
+        profile2 = Profile(sample_metadata=metadata2, profile=profile2, branch_length_fun=lambda x: 1/x)
+        #(Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_no_normalize(profile2)
+        (Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_and_normalize(profile2)
+        (weighted, _) = EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
+        dist_matrix[i][j] = dist_matrix[j][i] = weighted
+    os.chdir(cur_dir)
+    df = pd.DataFrame.from_dict(metadata, orient='index')
+    dm = DistanceMatrix(dist_matrix, sample_lst)
+    #dist_pc = pcoa(dm)
+    #dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title)
+    #plt.show()
+    return sample_lst, dist_matrix, metadata
+
+def get_dataframe(dir):
+    col_names = ["range", "similarity", "silhouette", "data_type", "sample_id"]
+    file_lst = os.listdir(dir)[1:]
+    os.chdir(dir)
+    sil_score_16s = []
+    sil_score_wgs = []
+    Range = []
+    similarity = []
+    for file in file_lst:
+        os.chdir(file) #individual run
+        #get 16s score
+        rg = int(re.findall("range(.*)dist", file)[0])
+        Range.append(rg)
+        sim = int(re.findall("dist(.*)run", file)[0])
+        if sim == -1:
+            sim = 35461
+        similarity.append(sim)
+        dist_matrix_16s = pd.read_table("distance-matrix.tsv", index_col=0)
+        label_16s = list(map(lambda x: x[3], dist_matrix_16s))
+        score_16s = silhouette_score(dist_matrix_16s, label_16s, metric="precomputed")
+        sil_score_16s.append(score_16s)
+        #get wgs score
+        sample_lst_wgs, dist_matrix_wgs, metadata = pairwise_unifrac('profiles')
+        label_wgs = list(map(lambda x: x[3], sample_lst_wgs))
+        score_wgs = silhouette_score(dist_matrix_wgs, label_wgs, metric="precomputed")
+        sil_score_wgs.append(score_wgs)
+        os.chdir('..')
+    df_16s = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
+    df_16s["data_type"] = "16s"
+    df_16s["sample_id"] = file_lst
+    df_16s["range"] = Range
+    df_16s["similarity"] = similarity
+    df_16s["silhouette"] = sil_score_16s
+    df_wgs = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
+    df_wgs["datatype"] = "wgs"
+    df_wgs["sample_id"] = file_lst
+    df_wgs["range"] = Range
+    df_wgs["similarity"] = similarity
+    df_wgs["silhouette"] = sil_score_wgs
+    df_combined = pd.concat([df_16s, df_wgs])
+    df_combined.to_csv("combined_df.txt", sep="\t")
+    return df_combined
+
+def get_boxplot(df):
+    sns.set_theme(style="ticks", palette="pastel")
+    sns.boxplot(x='range', y='silhoette', hue="data_type", data=df, palette=["m", "g"])
 
 #tests
 def test_create_profile():
