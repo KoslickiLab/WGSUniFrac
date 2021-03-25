@@ -1,11 +1,18 @@
 import os
 import logging
 from collections import defaultdict
-from ete3 import NCBITaxa
+from ete3 import NCBITaxa, TreeNode
 import copy
 import numpy as np
 import dendropy
+from biom import Table
+import pandas as pd
+import random
+import sys
+from scipy.stats import halfnorm
 ncbi = NCBITaxa()
+
+
 
 # classes
 class Prediction:
@@ -684,21 +691,12 @@ def create_profile(node_list, outdir, filename):
         rank_dict[rank] = []
     rank_list.reverse()
     #update abundance information
-    print("all your nodes are here: ")
-    print(id_list)
-    print("plus your filtered nodes")
+    print("here are the nodes")
     print(filtered_list)
     for id in filtered_list:
-        print("Im looking for %s" % id)
         lin_list = ncbi.get_lineage(id)  # get lineage
-        print("let's see the lineage...")
-        print(lin_list)
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
-        print("now let's see the dict")
-        print(lin_dict)
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
-        print("how is the reverse dict")
-        print(lin_dict_reverse)
         if id != lin_list[-1]: #in case the id is obsolete and translated to another
             id = lin_list[-1]
         cur_node = _get_node_from_taxid(id, node_list)
@@ -707,6 +705,8 @@ def create_profile(node_list, outdir, filename):
             new_node = Node(name='species'+str(id), tax=lin_dict_reverse['species'], abundance=cur_abund)
             node_list.append(new_node)
             rank_dict["species"].append(new_node)
+        else:
+            rank_dict["species"].append(cur_node)
         for rank in rank_list[1:]:
             cur_taxid = lin_dict_reverse[rank]
             cur_node = _get_node_from_taxid(cur_taxid, node_list)
@@ -830,3 +830,165 @@ def EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q):
             diffab[(i, Tint[i])] = lint[i, Tint[i]] * val  # Captures diffab
         Z += lint[i, Tint[i]] * abs(val)
     return (Z, diffab)
+
+#taxunifrac
+def setup(return_dist_dict=False):
+    os.chdir('data')
+    (T, l, nodes) = parse_tree_file('99_otus.tree')
+    tree = TreeNode('99_otus.tree', format=1, quoted_node_names=True)
+    otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
+    if return_dist_dict is True:
+        distance_dict = get_dist_dict('data/sorted_distance_mini.txt')
+        return (tree, otu_tax_dict, distance_dict)
+    else:
+        return (tree, otu_tax_dict)
+
+def get_dist_dict(file):
+    '''
+    read in the file line by line as a dict (node:list of nodes)
+    :param file:
+    :return:
+    '''
+    node_dict = dict()
+    with open(file,'r') as f:
+        for line in f.readlines():
+            line = line.strip()
+            nodes = line.split('\t')
+            node_dict[nodes[0]] = nodes[1:]
+    return node_dict
+
+def filter_against_tree(otu_file, nodes):
+    '''
+    remove nodes in otu_file that are not found on the tree. For the remaining nodes, parse into a dictionary
+    :param otu_file:
+    :param nodes: nodes on a selected tree
+    :return: a valid {otu:taxid} dict
+    '''
+    df = pd.read_table(otu_file, dtype=str)
+    # create dict
+    map_dict = df.set_index('otu')['taxid'].to_dict()
+    # print(df[0:5])
+    print("%d pairs present" % len(map_dict))
+    # filter out unwanted pairs
+    filtered_dict = dict()
+    all_keys = list(map_dict.keys())
+    present = list(set(all_keys) & set(nodes))  # otus present on the tree
+    for otu in present:
+        filtered_dict[otu] = map_dict[otu]
+    print('%d pairs left' % len(filtered_dict))
+    return filtered_dict
+
+def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dict, similarity=-1):
+    '''
+    :param num_org: number of organisms per sample
+    :param num_sample: number of samples per environment
+    :param sample_range: the spread of sample
+    :param similarity: how close are the two nodes chosen
+    :param distance_dict:
+    :param tax_dict:
+    :return:
+    '''
+    node1 = random.choice(list(distance_dict.keys()))
+    #node2 = distance_dict[node1][similarity]
+    #for test only
+    node2 = random.choice(list(distance_dict.keys()))
+    print(node1)
+    print(node2)
+    data_dict = dict()
+    env1_nodes = distance_dict[node1][:sample_range - 1]
+    env2_nodes = distance_dict[node2][:sample_range - 1]
+    #update the 2 lists above to contain Node object instead
+    for i, node in enumerate(env1_nodes):
+        #create Nodes, update tax
+        new_node = Node(name=node, tax=tax_dict[node])
+        if int(new_node.tax) != ncbi.get_lineage(new_node.tax)[-1]:
+            new_node.tax = ncbi.get_lineage(new_node.tax)[-1]
+        env1_nodes[i] = new_node
+    for i, node in enumerate(env2_nodes):
+        new_node = Node(name=node, tax=tax_dict[node])
+        if int(new_node.tax) != ncbi.get_lineage(new_node.tax)[-1]:
+            new_node.tax = ncbi.get_lineage(new_node.tax)[-1]
+        env2_nodes[i] = new_node
+    #create sample
+    if num_org >= sample_range:
+        for i in range(num_sample):
+            env1_key = "{}{}".format('env1sam', i)
+            env2_key = "{}{}".format('env2sam', i)
+            value1 = copy.deepcopy(env1_nodes)
+            value2 = copy.deepcopy(env2_nodes)
+            random.shuffle(value1)
+            random.shuffle(value2)
+            data_dict[env1_key] = value1
+            data_dict[env2_key] = value2
+    else:
+        for i in range(num_sample):
+            env1_key = "{}{}".format('env1sam', i)
+            env2_key = "{}{}".format('env2sam', i)
+            value1 = random.sample(env1_nodes, num_org)
+            value2 = random.sample(env2_nodes, num_org)
+            data_dict[env1_key] = value1
+            data_dict[env2_key] = value2
+    return data_dict
+
+def create_biom_table(table_id, data, filename, normalize=False):
+    '''
+    to be called after obtaining data by calling create_data
+    :param sample_metadata:
+    :param table_id:
+    :param data: dictionary in the form of sample_id:list of Nodes
+    :return:
+    '''
+    otus = []
+    sample_id = []  # column index
+    for key, value in list(data.items()):
+        sample_id.append(key)
+        value_name = list(map(lambda x: x.name, value))
+        otus = otus + value_name
+    otu_ids = list(set(otus))  # row index unique otus
+    print('total {} otus'.format(len(otu_ids)))
+    df = pd.DataFrame(columns=sample_id, index=otu_ids)
+    for key, value in list(data.items()): #key = sample id, value = list of Nodes
+        for x, node in enumerate(value, 1):
+            ab = 100. / (1.5 ** x)
+            ab = ab + halfnorm.rvs()
+            df.at[node.name, key] = ab
+    df = df.fillna(.0)
+    print(df)
+    table = Table(data=df.to_numpy(), observation_ids=otu_ids, sample_ids=sample_id, observation_metadata=None,
+                  sample_metadata=None, table_id=table_id)
+    normed = table.norm(axis='sample', inplace=False)
+    for key, value in list(data.items()):
+        for node in value:
+            node.abundance = normed.get_value_by_ids(node.name, key)
+    with open(filename, "w") as f:
+        if normalize:
+            normed.to_tsv(direct_io=f)
+        else:
+            table.to_tsv(direct_io=f)
+    return data
+
+
+#tests
+def test_create_profile():
+    nodes = ['1204725', '1036678', '183756', '867917', '66852', '633148', '638762', '49547', '483214', '186057', '242129', '1293586', '574338', '224719', '218300', '483896', '65421', '90427', '54250', '2303', '582419', '877455', '215773', '638774', '120963', '187420', '768672', '523849', '589924', '604354', '490098', '418010', '35749', '2261', '38024', '145261', '386456', '195522', '985053', '502115', '286152', '766501', '2171', '1077256', '267446', '262501', '2208', '573063', '647113', '334772', '1121009', '224720', '39152', '310064', '588319', '591019', '2309', '2269', '242697', '155321', '426368', '90909', '394295', '113653', '415426', '213231', '71280', '39441', '387631', '310083', '456320', '242129', '579137', '1184251', '267453', '190192', '487687', '183759', '39441', '387957', '498375', '419665', '281435', '183759', '183762', '536044', '49339', '176306', '399550', '694429', '430614', '39152', '523850', '122420', '54262', '190976', '269247', '129848', '218300', '868131', '328406', '660064', '710190', '2226', '227598', '187879', '242697', '647171', '190977', '1151117', '406327', '547558', '176306', '138903', '391623', '38025', '224325', '290067', '183759', '984979', '880724', '634498', '679901', '71998', '253161', '262501', '710191', '267435', '35749', '2162', '765177', '69540', '392018', '59277', '572478', '267439', '638764', '638773', '638771', '176307', '262498', '35749', '66851', '242697', '572546', '404323', '2265', '328406', '119227', '187880', '1069083', '638763', '186057', '190974', '253161', '110163', '487685', '273116', '46540', '693661', '145261', '583356', '253161', '145262', '2161', '2161', '339860', '256826', '170861', '766501', '256826', '165215', '218300', '272557', '47311', '66852', '243898', '183756', '207243', '573064', '253161', '179630', '70601', '2162', '867904', '1343739', '227597', '2226', '1094980', '56636', '269797', '52001', '259564', '2186', '392018', '565033', '523846', '110164', '59277']
+
+    #nodes = list(set(nodes))
+    #print(len(nodes))
+    real_nodes = []
+    for i, org in enumerate(nodes,1):
+        real_node = Node(name=str(org), tax=int(org), abundance=100/(2**i))
+        real_nodes.append(real_node)
+    create_profile(real_nodes, "data", "test_create_profile2.profile")
+
+def test_create_biom_table():
+    dist_dict = get_dist_dict('data/sorted_distance_mini.txt')
+    (T, l, nodes) = parse_tree_file('data/99_otus.tree')
+    otu_tax_dict = filter_against_tree('data/otu_with_valid_taxid.txt', nodes)
+    data_dict = create_data_simple(num_org=50, num_sample=5, distance_dict=dist_dict, tax_dict=otu_tax_dict, sample_range=200)
+
+    updated_data = create_biom_table(table_id="test_create_biom_table", data=data_dict, filename="data/test_create_biom_table", normalize=True)
+    for k,v in updated_data.items():
+        print(k)
+        print(list(map(lambda x:x.name, v)))
+        print(list(map(lambda x: x.abundance, v)))
+
