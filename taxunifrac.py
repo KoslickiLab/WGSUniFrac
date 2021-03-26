@@ -674,13 +674,28 @@ def create_profile(node_list, outdir, filename):
     :param filename:
     :return:
     '''
-    id_list = list(map(lambda x:x.tax, node_list))
+    ab_dict=dict()
+    for node in node_list:
+        lin = ncbi.get_lineage(node.tax) #lineage
+        lin_dict = ncbi.get_rank(lin) #id:rank
+        lin_dict_reverse = {y: x for x, y in lin_dict.items()} #rank:id
+        if node.tax != lin[-1]: #in case the id is obsolete and translated to another
+            node.tax = lin[-1]
+        if lin_dict[node.tax] != "species":
+            node.tax = lin_dict_reverse["species"]
+        if node.tax not in ab_dict:
+            ab_dict[node.tax] = .0
+        ab_dict[node.tax]+=node.abundance
+    unique_nodes = list(map(lambda x: Node(name=x, tax=x, abundance=ab_dict[x]), list(ab_dict.keys())))
+    id_list = list(ab_dict.keys())
+    '''
     filtered_list = filter_id_list(id_list)
     filtered_list = list(map(int, filtered_list))
     print("length after filtering is %s " % len(filtered_list))
     if len(filtered_list) == 0:
         print("nothing is left.")
         return
+    '''
     outfile = outdir + '/' + filename
     f = open(outfile, "w+")
     f.write("# Taxonomic Profiling Output\n"
@@ -696,33 +711,25 @@ def create_profile(node_list, outdir, filename):
     rank_list.reverse()
     #update abundance information
     print("here are the nodes")
-    print(filtered_list)
-    for id in filtered_list:
+    print(len(unique_nodes))
+    print(list(map(lambda x: x.tax, unique_nodes)))
+    print(list(map(lambda x:x.abundance, unique_nodes)))
+    for id in id_list:
         lin_list = ncbi.get_lineage(id)  # get lineage
         lin_dict = ncbi.get_rank(lin_list)  # create dict id:rank
         lin_dict_reverse = {y: x for x, y in lin_dict.items()}  # reverse dict rank:id
-        if id != lin_list[-1]: #in case the id is obsolete and translated to another
-            id = lin_list[-1]
-        cur_node = _get_node_from_taxid(id, node_list)
+        cur_node = _get_node_from_taxid(id, unique_nodes)
         cur_abund = cur_node.abundance
-        if lin_dict[id] != 'species':
-            new_node = Node(name='species'+str(id), tax=lin_dict_reverse['species'], abundance=cur_abund)
-            node_list.append(new_node)
-            rank_dict["species"].append(new_node)
-        else:
-            rank_dict["species"].append(cur_node)
+        rank_dict["species"].append(cur_node)
         for rank in rank_list[1:]:
             cur_taxid = lin_dict_reverse[rank]
-            cur_node = _get_node_from_taxid(cur_taxid, node_list)
+            cur_node = _get_node_from_taxid(cur_taxid, unique_nodes)
             if cur_node is None:
                 cur_node = Node(name=rank+str(cur_taxid), tax=cur_taxid)
-                node_list.append(cur_node)
+                unique_nodes.append(cur_node)
             cur_node.abundance = cur_node.abundance+cur_abund
             if cur_node not in rank_dict[rank]:
                 rank_dict[rank].append(cur_node)
-            else:
-                print(cur_node.tax)
-                print(list(map(lambda x: x.tax, rank_dict[rank])))
             #cur_abund = cur_node.abundance
     rank_list.reverse()
     for k, v in rank_dict.items():
@@ -742,7 +749,7 @@ def create_profile(node_list, outdir, filename):
                 taxid = lin_dict_reverse[r]
                 taxpath = taxpath + "|" + str(taxid)
                 name = ncbi.get_taxid_translator([taxid])[taxid]
-                cur_node = _get_node_from_taxid(taxid, node_list)
+                cur_node = _get_node_from_taxid(taxid, unique_nodes)
                 namepath = namepath + "|" + name
             f.writelines([str(node.tax), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(cur_node.abundance)])
             f.write("\n")
@@ -1065,7 +1072,7 @@ def get_dataframe(dir):
     df_16s["similarity"] = similarity
     df_16s["silhouette"] = sil_score_16s
     df_wgs = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
-    df_wgs["datatype"] = "wgs"
+    df_wgs["data_type"] = "wgs"
     df_wgs["sample_id"] = file_lst
     df_wgs["range"] = Range
     df_wgs["similarity"] = similarity
@@ -1076,11 +1083,11 @@ def get_dataframe(dir):
 
 def get_boxplot(df):
     sns.set_theme(style="ticks", palette="pastel")
-    sns.boxplot(x='range', y='silhoette', hue="data_type", data=df, palette=["m", "g"])
+    sns.boxplot(x='range', y='silhouette', hue="data_type", data=df, palette=["m", "g"])
 
 #tests
 def test_create_profile():
-    nodes = ['1204725', '1036678', '183756', '867917', '66852', '633148', '638762', '49547', '483214', '186057', '242129', '1293586', '574338', '224719', '218300', '483896', '65421', '90427', '54250', '2303', '582419', '877455', '215773', '638774', '120963', '187420', '768672', '523849', '589924', '604354', '490098', '418010', '35749', '2261', '38024', '145261', '386456', '195522', '985053', '502115', '286152', '766501', '2171', '1077256', '267446', '262501', '2208', '573063', '647113', '334772', '1121009', '224720', '39152', '310064', '588319', '591019', '2309', '2269', '242697', '155321', '426368', '90909', '394295', '113653', '415426', '213231', '71280', '39441', '387631', '310083', '456320', '242129', '579137', '1184251', '267453', '190192', '487687', '183759', '39441', '387957', '498375', '419665', '281435', '183759', '183762', '536044', '49339', '176306', '399550', '694429', '430614', '39152', '523850', '122420', '54262', '190976', '269247', '129848', '218300', '868131', '328406', '660064', '710190', '2226', '227598', '187879', '242697', '647171', '190977', '1151117', '406327', '547558', '176306', '138903', '391623', '38025', '224325', '290067', '183759', '984979', '880724', '634498', '679901', '71998', '253161', '262501', '710191', '267435', '35749', '2162', '765177', '69540', '392018', '59277', '572478', '267439', '638764', '638773', '638771', '176307', '262498', '35749', '66851', '242697', '572546', '404323', '2265', '328406', '119227', '187880', '1069083', '638763', '186057', '190974', '253161', '110163', '487685', '273116', '46540', '693661', '145261', '583356', '253161', '145262', '2161', '2161', '339860', '256826', '170861', '766501', '256826', '165215', '218300', '272557', '47311', '66852', '243898', '183756', '207243', '573064', '253161', '179630', '70601', '2162', '867904', '1343739', '227597', '2226', '1094980', '56636', '269797', '52001', '259564', '2186', '392018', '565033', '523846', '110164', '59277']
+    nodes = ['1204725', '1204725', '183756', '867917', '66852', '633148', '638762', '49547', '483214', '186057', '242129', '1293586', '574338', '224719', '218300', '483896', '65421', '90427', '54250', '2303', '582419', '877455', '215773', '638774', '120963', '187420', '768672', '523849', '589924', '604354', '490098', '418010', '35749', '2261', '38024', '145261', '386456', '195522', '985053', '502115', '286152', '766501', '2171', '1077256', '267446', '262501', '2208', '573063', '647113', '334772', '1121009', '224720', '39152', '310064', '588319', '591019', '2309', '2269', '242697', '155321', '426368', '90909', '394295', '113653', '415426', '213231', '71280', '39441', '387631', '310083', '456320', '242129', '579137', '1184251', '267453', '190192', '487687', '183759', '39441', '387957', '498375', '419665', '281435', '183759', '183762', '536044', '49339', '176306', '399550', '694429', '430614', '39152', '523850', '122420', '54262', '190976', '269247', '129848', '218300', '868131', '328406', '660064', '710190', '2226', '227598', '187879', '242697', '647171', '190977', '1151117', '406327', '547558', '176306', '138903', '391623', '38025', '224325', '290067', '183759', '984979', '880724', '634498', '679901', '71998', '253161', '262501', '710191', '267435', '35749', '2162', '765177', '69540', '392018', '59277', '572478', '267439', '638764', '638773', '638771', '176307', '262498', '35749', '66851', '242697', '572546', '404323', '2265', '328406', '119227', '187880', '1069083', '638763', '186057', '190974', '253161', '110163', '487685', '273116', '46540', '693661', '145261', '583356', '253161', '145262', '2161', '2161', '339860', '256826', '170861', '766501', '256826', '165215', '218300', '272557', '47311', '66852', '243898', '183756', '207243', '573064', '253161', '179630', '70601', '2162', '867904', '1343739', '227597', '2226', '1094980', '56636', '269797', '52001', '259564', '2186', '392018', '565033', '523846', '110164', '59277']
 
     #nodes = list(set(nodes))
     #print(len(nodes))
