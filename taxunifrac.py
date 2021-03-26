@@ -934,8 +934,8 @@ def create_data_simple(num_org, num_sample, sample_range, distance_dict, tax_dic
         for i in range(num_sample):
             env1_key = "{}{}".format('env1sam', i)
             env2_key = "{}{}".format('env2sam', i)
-            value1 = random.sample(env1_nodes, num_org)
-            value2 = random.sample(env2_nodes, num_org)
+            value1 = copy.deepcopy(random.sample(env1_nodes, num_org))
+            value2 = copy.deepcopy(random.sample(env2_nodes, num_org))
             data_dict[env1_key] = value1
             data_dict[env2_key] = value2
     return data_dict
@@ -1108,4 +1108,6 @@ def test_create_biom_table():
         print(k)
         print(list(map(lambda x:x.name, v)))
         print(list(map(lambda x: x.abundance, v)))
+        print(np.sum(list(map(lambda x: float(x.abundance), v))))
+
 
