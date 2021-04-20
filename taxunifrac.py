@@ -11,9 +11,10 @@ import random
 import seaborn as sns
 from scipy.stats import halfnorm
 from skbio import DistanceMatrix #to install: pip install scikit-bio
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 import re
 import itertools as it
+import matplotlib.pyplot as plt
 ncbi = NCBITaxa()
 
 
@@ -853,6 +854,13 @@ def setup(return_dist_dict=False):
     else:
         return (otu_tax_dict)
 
+def _write_dict_to_file(result, filename):
+    for otu, taxid in list(result.items()):
+        with open(filename, 'a') as f:
+            f.write("%s\t" % otu)  # will be the first one anyway
+            f.write("%s\t" % taxid)
+            f.write("\n")
+
 def get_dist_dict(file):
     '''
     read in the file line by line as a dict (node:list of nodes)
@@ -1039,11 +1047,15 @@ def pairwise_unifrac(dir):
     return sample_lst, dist_matrix, metadata
 
 def get_dataframe(dir):
-    col_names = ["range", "similarity", "silhouette", "data_type", "sample_id"]
+    col_names = ["range", "similarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
     file_lst = os.listdir(dir)[1:]
     os.chdir(dir)
     sil_score_16s = []
     sil_score_wgs = []
+    calinski_16s = []
+    calinski_wgs = []
+    davies_16s = []
+    davies_wgs = []
     Range = []
     similarity = []
     for file in file_lst:
@@ -1059,11 +1071,15 @@ def get_dataframe(dir):
         label_16s = list(map(lambda x: x[3], dist_matrix_16s))
         score_16s = silhouette_score(dist_matrix_16s, label_16s, metric="precomputed")
         sil_score_16s.append(score_16s)
+        calinski_16s.append(calinski_harabasz_score(dist_matrix_16s, label_16s))
+        davies_16s.append(davies_bouldin_score(dist_matrix_16s, label_16s))
         #get wgs score
         sample_lst_wgs, dist_matrix_wgs, metadata = pairwise_unifrac('profiles')
         label_wgs = list(map(lambda x: x[3], sample_lst_wgs))
         score_wgs = silhouette_score(dist_matrix_wgs, label_wgs, metric="precomputed")
         sil_score_wgs.append(score_wgs)
+        calinski_wgs.append(calinski_harabasz_score(dist_matrix_wgs, label_wgs))
+        davies_wgs.append(davies_bouldin_score(dist_matrix_wgs, label_wgs))
         os.chdir('..')
     df_16s = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
     df_16s["data_type"] = "16s"
@@ -1071,21 +1087,73 @@ def get_dataframe(dir):
     df_16s["range"] = Range
     df_16s["similarity"] = similarity
     df_16s["silhouette"] = sil_score_16s
+    df_16s["Calinski-Harabasz"] = calinski_16s
+    df_16s["Davies-Bouldin"] = davies_16s
     df_wgs = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
     df_wgs["data_type"] = "wgs"
     df_wgs["sample_id"] = file_lst
     df_wgs["range"] = Range
     df_wgs["similarity"] = similarity
     df_wgs["silhouette"] = sil_score_wgs
+    df_wgs["Calinski-Harabasz"] = calinski_wgs
+    df_wgs["Davies-Bouldin"] = davies_wgs
     df_combined = pd.concat([df_16s, df_wgs])
     df_combined.to_csv("combined_df.txt", sep="\t")
     return df_combined
 
-def get_boxplot(df):
+def get_boxplot(df, x, y):
     sns.set_theme(style="ticks", palette="pastel")
-    sns.boxplot(x='range', y='silhouette', hue="data_type", data=df, palette=["m", "g"])
+    sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=["m", "g"])
+
+def get_plot_from_file(file, x, y, pallete):
+    df = pd.read_table(file, index_col=0)
+    print(df)
+    sns.set_theme(style="ticks", palette="pastel")
+    sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=pallete)
+    plt.show()
+
+def get_abundance_file(node_list, file_name, abund_fun="exp", factor=1.5):
+    '''
+    writes out a file with first column being otu and second being the relative abundance
+    :param node_list: a list of otus
+    :param abund_fun: abundance function, can be uniform or exponential
+    :return:
+    '''
+    if abund_fun == "uniform":
+        with open(file_name, 'w') as f:
+            for otu in node_list:
+                f.writelines([str(otu), '\t', str(1./len(node_list)), '\n'])
+    else:
+        abundances = []
+        for i in range(len(node_list)):
+            abundances.append(100. / (factor ** (i+1)) + halfnorm.rvs())
+        normed = list(map(lambda x: round(float(x)/sum(abundances),6), abundances))
+        print(normed)
+        print(sum(normed))
+        with open(file_name, 'w') as f:
+            for i, otu in enumerate(node_list):
+                f.writelines([str(otu), '\t', str(normed[i]), '\n'])
+
+def get_nodes_for_simulated_data(num_otus, otu_tax_file):
+    '''
+
+    :param num_otus:
+    :param otu_tax_file:
+    :return: list of otu to be used for get_abundance_file
+    '''
+    otu_tax_dict = dict()
+    with open(otu_tax_file, 'r') as f:
+        for line in f.readlines():
+            line = line.strip().split('\t')
+            otu_tax_dict[line[0]] = line[1]
+    return random.sample(list(otu_tax_dict.keys()), num_otus)
+
 
 #tests
+def test_get_abundance_file():
+    node_list = ['585881', '4357765', '4321459', '789693']
+    get_abundance_file(node_list, "test_ab_file_uniform.txt", "exp")
+
 def test_create_profile():
     nodes = ['1204725', '1204725', '183756', '867917', '66852', '633148', '638762', '49547', '483214', '186057', '242129', '1293586', '574338', '224719', '218300', '483896', '65421', '90427', '54250', '2303', '582419', '877455', '215773', '638774', '120963', '187420', '768672', '523849', '589924', '604354', '490098', '418010', '35749', '2261', '38024', '145261', '386456', '195522', '985053', '502115', '286152', '766501', '2171', '1077256', '267446', '262501', '2208', '573063', '647113', '334772', '1121009', '224720', '39152', '310064', '588319', '591019', '2309', '2269', '242697', '155321', '426368', '90909', '394295', '113653', '415426', '213231', '71280', '39441', '387631', '310083', '456320', '242129', '579137', '1184251', '267453', '190192', '487687', '183759', '39441', '387957', '498375', '419665', '281435', '183759', '183762', '536044', '49339', '176306', '399550', '694429', '430614', '39152', '523850', '122420', '54262', '190976', '269247', '129848', '218300', '868131', '328406', '660064', '710190', '2226', '227598', '187879', '242697', '647171', '190977', '1151117', '406327', '547558', '176306', '138903', '391623', '38025', '224325', '290067', '183759', '984979', '880724', '634498', '679901', '71998', '253161', '262501', '710191', '267435', '35749', '2162', '765177', '69540', '392018', '59277', '572478', '267439', '638764', '638773', '638771', '176307', '262498', '35749', '66851', '242697', '572546', '404323', '2265', '328406', '119227', '187880', '1069083', '638763', '186057', '190974', '253161', '110163', '487685', '273116', '46540', '693661', '145261', '583356', '253161', '145262', '2161', '2161', '339860', '256826', '170861', '766501', '256826', '165215', '218300', '272557', '47311', '66852', '243898', '183756', '207243', '573064', '253161', '179630', '70601', '2162', '867904', '1343739', '227597', '2226', '1094980', '56636', '269797', '52001', '259564', '2186', '392018', '565033', '523846', '110164', '59277']
 
