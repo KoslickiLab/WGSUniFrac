@@ -848,11 +848,12 @@ def setup(return_dist_dict=False):
     os.chdir('data')
     (T, l, nodes) = parse_tree_file('99_otus.tree')
     otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
+    otu_acc_dict = _get_dict_from_file('mapping_file.txt', 0, 2)
     if return_dist_dict is True:
         distance_dict = get_dist_dict('sorted_distance_complete.txt')
         return (otu_tax_dict, distance_dict)
     else:
-        return (otu_tax_dict)
+        return (otu_tax_dict, otu_acc_dict)
 
 def _write_dict_to_file(result, filename):
     for otu, taxid in list(result.items()):
@@ -860,6 +861,32 @@ def _write_dict_to_file(result, filename):
             f.write("%s\t" % otu)  # will be the first one anyway
             f.write("%s\t" % taxid)
             f.write("\n")
+
+def _get_dict_from_file(file, key_col, val_col):
+    _dict = dict()
+    with open(file,'r') as f:
+        for line in f.readlines():
+            line = line.strip()
+            item = line.split('\t')
+            if len(item) > val_col:
+                _dict[item[key_col]] = item[val_col][1:] #remove '>'
+    return _dict
+
+def _get_16s_genome_with_wgs_data():
+    (otu_tax_dict, otu_acc_dict) = setup()
+    new_file = 'filtered_99_otus.fasta'
+    with open('99_otus.fasta', 'r') as old:
+        with open(new_file, 'w') as new:
+            while True:
+                line = old.readline()
+                if not line:
+                    break
+                line = line.strip()
+                if line[0] is '>':
+                    otu = line[1:]
+                    if otu in otu_acc_dict.keys():
+                        new.writelines([line, '\n'])
+                        new.writelines([old.readline()])
 
 def get_dist_dict(file):
     '''
@@ -1148,6 +1175,30 @@ def get_nodes_for_simulated_data(num_otus, otu_tax_file):
             otu_tax_dict[line[0]] = line[1]
     return random.sample(list(otu_tax_dict.keys()), num_otus)
 
+def get_abundance_file_for_wgs_read_simulation(rank_file, out_file='abundance_file.txt'):
+    '''
+    file looks like this:
+    # rank seq_id rel_abund_perc
+    seq_id = otu
+    :param rank_file: grinder-rank.txt file
+    :return: an abundance file with first column being accessions and second column being relative abundance
+    '''
+    (otu_tax_dict, tax_otu_dict, tax_acc_dict) = setup()
+    with open(rank_file, 'r') as rf:
+        with open(out_file, 'w') as af:
+            rf.readline() #skip heading
+            while True:
+                line = rf.readline()
+                if not line:
+                    break
+                line = line.strip().split('\t')
+                otu = line[1]
+                abundance = line[2]
+                acc = tax_acc_dict[otu_tax_dict[otu]]
+                af.writelines([acc, '\t', abundance, '\n'])
+
+
+
 
 #tests
 def test_get_abundance_file():
@@ -1177,5 +1228,8 @@ def test_create_biom_table():
         print(list(map(lambda x:x.name, v)))
         print(list(map(lambda x: x.abundance, v)))
         print(np.sum(list(map(lambda x: float(x.abundance), v))))
+
+if __name__ == '__main__':
+    get_abundance_file_for_wgs_read_simulation('grinder-1-ranks.txt')
 
 
