@@ -15,6 +15,10 @@ from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bo
 import re
 import itertools as it
 import matplotlib.pyplot as plt
+import tkinter
+import matplotlib
+matplotlib.use('TkAgg')
+from skbio.stats.ordination import pcoa
 ncbi = NCBITaxa()
 
 
@@ -846,14 +850,14 @@ def EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q):
 #taxunifrac
 def setup(return_dist_dict=False):
     os.chdir('data')
-    (T, l, nodes) = parse_tree_file('99_otus.tree')
-    otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
-    otu_acc_dict = _get_dict_from_file('mapping_file.txt', 0, 2)
+   # (T, l, nodes) = parse_tree_file('99_otus.tree')
+   # otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
+    otu_acc_dict = _get_dict_from_file('mapping_file2.txt', 0, 2)
     if return_dist_dict is True:
         distance_dict = get_dist_dict('sorted_distance_complete.txt')
-        return (otu_tax_dict, distance_dict)
+        return (otu_acc_dict, distance_dict)
     else:
-        return (otu_tax_dict, otu_acc_dict)
+        return (otu_acc_dict)
 
 def _write_dict_to_file(result, filename):
     for otu, taxid in list(result.items()):
@@ -873,8 +877,12 @@ def _get_dict_from_file(file, key_col, val_col):
     return _dict
 
 def _get_16s_genome_with_wgs_data():
-    (otu_tax_dict, otu_acc_dict) = setup()
+    os.chdir('data')
+    otu_acc_dict = _get_dict_from_file('mapping_file2.txt', 0, 2)
     new_file = 'filtered_99_otus.fasta'
+    #double check with wgs_genome file
+    wgs_file = open('wgs_genome2.fasta', 'r')
+    wgs_fh = wgs_file.read()
     with open('99_otus.fasta', 'r') as old:
         with open(new_file, 'w') as new:
             while True:
@@ -882,11 +890,12 @@ def _get_16s_genome_with_wgs_data():
                 if not line:
                     break
                 line = line.strip()
-                if line[0] is '>':
+                if line[0] == '>':
                     otu = line[1:]
                     if otu in otu_acc_dict.keys():
-                        new.writelines([line, '\n'])
-                        new.writelines([old.readline()])
+                        if re.findall(otu_acc_dict[otu], wgs_fh):
+                            new.writelines([line, '\n'])
+                            new.writelines([old.readline()])
 
 def get_dist_dict(file):
     '''
@@ -895,12 +904,19 @@ def get_dist_dict(file):
     :return:
     '''
     node_dict = dict()
+    count=0
     with open(file,'r') as f:
         for line in f.readlines():
             line = line.strip()
             nodes = line.split('\t')
             node_dict[nodes[0]] = nodes[1:]
+            count+=1
     return node_dict
+
+def _get_sorted_distance(node, node_list):
+    node_list.sort(key=lambda x: node.get_distance(x), reverse=False)
+    node_list = list(map(lambda x:x.name, node_list))
+    return node.name, node_list
 
 def filter_against_tree(otu_file, nodes):
     '''
@@ -1030,7 +1046,7 @@ def run_one(dist_dict, tax_dict, num_org, num_sample, range, similarity, run):
         create_profile(value, 'profiles', filename)
     os.chdir(cur_dir)
 
-def pairwise_unifrac(dir):
+def pairwise_unifrac(dir, plot_title):
     '''
     Computes pairwise unifrac distance among profiles in a given directory
     :param dir: a directory containing profile files
@@ -1038,8 +1054,12 @@ def pairwise_unifrac(dir):
     '''
     cur_dir = os.getcwd()
     file_lst = os.listdir(dir) #list files in the directory
+    print(file_lst)
     os.chdir(dir)
-    sample_lst = [os.path.splitext(profile)[0] for profile in file_lst] #remove extension
+    if '.DS_Store' in file_lst:
+        file_lst.remove('.DS_Store')
+    sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
+
     #create metadata
     metadata = dict()
     for name in sample_lst:
@@ -1068,9 +1088,10 @@ def pairwise_unifrac(dir):
     os.chdir(cur_dir)
     df = pd.DataFrame.from_dict(metadata, orient='index')
     dm = DistanceMatrix(dist_matrix, sample_lst)
-    #dist_pc = pcoa(dm)
-    #dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title)
-    #plt.show()
+    dist_pc = pcoa(dm)
+    dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title)
+    plt.show()
+    plt.savefig('data/wgs_pcoa.png')
     return sample_lst, dist_matrix, metadata
 
 def get_dataframe(dir):
@@ -1139,6 +1160,21 @@ def get_plot_from_file(file, x, y, pallete):
     sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=pallete)
     plt.show()
 
+def get_plot_from_exported(matrix_file):
+    #pcoa plot
+    #needs modification
+    distance_matrix = pd.read_csv(matrix_file, sep='\t', header=0, index_col=0)
+    sample_lst = list(distance_matrix.columns)
+    metadata = dict()
+    for name in sample_lst:
+        env = name[3]
+        metadata[name] = {'environment': env}
+    df = pd.DataFrame.from_dict(metadata, orient='index')
+    dm = DistanceMatrix(distance_matrix, sample_lst)
+    dist_pc = pcoa(dm)
+    dist_pc.plot(df=df, column="environment", cmap='Set1')
+    plt.show()
+
 def get_abundance_file(node_list, file_name, abund_fun="exp", factor=1.5):
     '''
     writes out a file with first column being otu and second being the relative abundance
@@ -1155,15 +1191,12 @@ def get_abundance_file(node_list, file_name, abund_fun="exp", factor=1.5):
         for i in range(len(node_list)):
             abundances.append(100. / (factor ** (i+1)) + halfnorm.rvs())
         normed = list(map(lambda x: round(float(x)/sum(abundances),6), abundances))
-        print(normed)
-        print(sum(normed))
         with open(file_name, 'w') as f:
             for i, otu in enumerate(node_list):
                 f.writelines([str(otu), '\t', str(normed[i]), '\n'])
 
 def get_nodes_for_simulated_data(num_otus, otu_tax_file):
     '''
-
     :param num_otus:
     :param otu_tax_file:
     :return: list of otu to be used for get_abundance_file
@@ -1183,7 +1216,7 @@ def get_abundance_file_for_wgs_read_simulation(rank_file, out_file='abundance_fi
     :param rank_file: grinder-rank.txt file
     :return: an abundance file with first column being accessions and second column being relative abundance
     '''
-    (otu_tax_dict, tax_otu_dict, tax_acc_dict) = setup()
+    otu_acc_dict = _get_dict_from_file('data/mapping_file2.txt', 0, 2)
     with open(rank_file, 'r') as rf:
         with open(out_file, 'w') as af:
             rf.readline() #skip heading
@@ -1194,9 +1227,61 @@ def get_abundance_file_for_wgs_read_simulation(rank_file, out_file='abundance_fi
                 line = line.strip().split('\t')
                 otu = line[1]
                 abundance = line[2]
-                acc = tax_acc_dict[otu_tax_dict[otu]]
+                acc = otu_acc_dict[otu]
                 af.writelines([acc, '\t', abundance, '\n'])
 
+def get_wgs_input_for_grinder(dir, out_dir):
+    files = os.listdir(dir)
+    rank_files = list(filter(lambda v: re.search('ranks', v), files))
+    for file in rank_files:
+        sample_id = '-'.join(file.split('-')[0:2]) #e.g. basename-num
+        abund_file_name = out_dir+'/'+sample_id+'-abundance.txt'
+        get_abundance_file_for_wgs_read_simulation(os.getcwd()+'/'+dir+'/'+file, abund_file_name)
+
+def get_grinder_abundances_for_both(sample_num, org_num, prefix, out_dir, env_num, rnge, dist):
+    distance_dict = get_dist_dict('data/grinder_distance_matrix.txt')
+    otu_acc_dict = _get_dict_from_file("data/mapping_file2.txt", 0, 2)
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    os.chdir(out_dir)
+    if not os.path.exists('16s_abundance_files'):
+        os.mkdir('16s_abundance_files')
+    if not os.path.exists('wgs_abundance_files'):
+        os.mkdir('wgs_abundance_files')
+    # choose env nodes
+    env_nodes = []
+    for i in range(env_num):
+        print(env_nodes)
+        if len(env_nodes) == 0:
+            node1 = random.choice(list(distance_dict.keys()))  # env 1
+            env_nodes.append(node1)
+        else:
+            prev_node = env_nodes[-1]
+            print('prev_node is', prev_node)
+            cur_node = distance_dict[prev_node][dist]
+            print('current node is', cur_node)
+            neighbor = 1
+            while cur_node in env_nodes:
+                # if cur_node already in env_nodes, pick one close enough
+                cur_node = distance_dict[cur_node][neighbor]
+                neighbor += 1
+            env_nodes.append(cur_node)
+    # 16s abundance files
+    os.chdir('16s_abundance_files')
+    for env in range(env_num):
+        for sampl in range(sample_num):
+            file_name = prefix + '-env' + str(env) + '-sample' + str(sampl) + '.txt'
+            print(file_name)
+            sample_nodes = random.sample(distance_dict[env_nodes[env]][:rnge - 1], org_num)
+            get_abundance_file(sample_nodes, file_name)
+    wgs_dir = '../wgs_abundance_files/'
+    for file in os.listdir():
+        wgs_file_name = wgs_dir + 'wgs_' + file
+        with open(file,'r') as f:
+            with open(wgs_file_name, 'w+') as g:
+                for line in f.readlines():
+                    (otu, abundance) = line.strip().split('\t')
+                    g.writelines([str(otu_acc_dict[otu]), '\t', abundance, '\n'])
 
 
 
@@ -1230,6 +1315,5 @@ def test_create_biom_table():
         print(np.sum(list(map(lambda x: float(x.abundance), v))))
 
 if __name__ == '__main__':
-    get_abundance_file_for_wgs_read_simulation('grinder-1-ranks.txt')
-
+    get_dist_dict('data/grinder_distance_matrix.txt')
 
