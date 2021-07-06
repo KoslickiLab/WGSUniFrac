@@ -1046,7 +1046,7 @@ def run_one(dist_dict, tax_dict, num_org, num_sample, range, similarity, run):
         create_profile(value, 'profiles', filename)
     os.chdir(cur_dir)
 
-def pairwise_unifrac(dir, plot_title):
+def pairwise_unifrac(dir, plot_title, alpha):
     '''
     Computes pairwise unifrac distance among profiles in a given directory
     :param dir: a directory containing profile files
@@ -1054,12 +1054,11 @@ def pairwise_unifrac(dir, plot_title):
     '''
     cur_dir = os.getcwd()
     file_lst = os.listdir(dir) #list files in the directory
-    print(file_lst)
+    #print(file_lst)
     os.chdir(dir)
     if '.DS_Store' in file_lst:
         file_lst.remove('.DS_Store')
     sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
-
     #create metadata
     metadata = dict()
     for name in sample_lst:
@@ -1079,8 +1078,8 @@ def pairwise_unifrac(dir, plot_title):
         profile_list2 = open_profile_from_tsv(id_2, False)
         name1, metadata1, profile1 = profile_list1[0]
         name2, metadata2, profile2 = profile_list2[0]
-        profile1 = Profile(sample_metadata=metadata1, profile=profile1, branch_length_fun=lambda x: 1/x)
-        profile2 = Profile(sample_metadata=metadata2, profile=profile2, branch_length_fun=lambda x: 1/x)
+        profile1 = Profile(sample_metadata=metadata1, profile=profile1, branch_length_fun=lambda x: x**alpha)
+        profile2 = Profile(sample_metadata=metadata2, profile=profile2, branch_length_fun=lambda x: x**alpha)
         #(Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_no_normalize(profile2)
         (Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_and_normalize(profile2)
         (weighted, _) = EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
@@ -1091,7 +1090,7 @@ def pairwise_unifrac(dir, plot_title):
     dist_pc = pcoa(dm)
     dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title)
     plt.show()
-    plt.savefig('data/wgs_pcoa.png')
+    #plt.savefig('data/wgs_pcoa.png')
     return sample_lst, dist_matrix, metadata
 
 def get_dataframe(dir):
@@ -1160,7 +1159,7 @@ def get_plot_from_file(file, x, y, pallete):
     sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=pallete)
     plt.show()
 
-def get_plot_from_exported(matrix_file):
+def get_plot_from_exported(matrix_file, plot_title):
     #pcoa plot
     #needs modification
     distance_matrix = pd.read_csv(matrix_file, sep='\t', header=0, index_col=0)
@@ -1172,7 +1171,7 @@ def get_plot_from_exported(matrix_file):
     df = pd.DataFrame.from_dict(metadata, orient='index')
     dm = DistanceMatrix(distance_matrix, sample_lst)
     dist_pc = pcoa(dm)
-    dist_pc.plot(df=df, column="environment", cmap='Set1')
+    dist_pc.plot(df=df, column="environment", cmap='Set1', title=plot_title)
     plt.show()
 
 def get_abundance_file(node_list, file_name, abund_fun="exp", factor=1.5):
@@ -1238,8 +1237,8 @@ def get_wgs_input_for_grinder(dir, out_dir):
         abund_file_name = out_dir+'/'+sample_id+'-abundance.txt'
         get_abundance_file_for_wgs_read_simulation(os.getcwd()+'/'+dir+'/'+file, abund_file_name)
 
-def get_grinder_abundances_for_both(sample_num, org_num, prefix, out_dir, env_num, rnge, dist):
-    distance_dict = get_dist_dict('data/grinder_distance_matrix.txt')
+def get_grinder_abundances_for_both(sample_num, org_num, out_dir, env_num, rnge, dist):
+    distance_dict = get_dist_dict('data/grinder_distance_matrix_match_primer.txt')
     otu_acc_dict = _get_dict_from_file("data/mapping_file2.txt", 0, 2)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
@@ -1257,9 +1256,9 @@ def get_grinder_abundances_for_both(sample_num, org_num, prefix, out_dir, env_nu
             env_nodes.append(node1)
         else:
             prev_node = env_nodes[-1]
-            print('prev_node is', prev_node)
+            #print('prev_node is', prev_node)
             cur_node = distance_dict[prev_node][dist]
-            print('current node is', cur_node)
+            #print('current node is', cur_node)
             neighbor = 1
             while cur_node in env_nodes:
                 # if cur_node already in env_nodes, pick one close enough
@@ -1270,13 +1269,13 @@ def get_grinder_abundances_for_both(sample_num, org_num, prefix, out_dir, env_nu
     os.chdir('16s_abundance_files')
     for env in range(env_num):
         for sampl in range(sample_num):
-            file_name = prefix + '-env' + str(env) + '-sample' + str(sampl) + '.txt'
+            file_name = 'env' + str(env) + '-sample' + str(sampl) + '.txt'
             print(file_name)
             sample_nodes = random.sample(distance_dict[env_nodes[env]][:rnge - 1], org_num)
             get_abundance_file(sample_nodes, file_name)
     wgs_dir = '../wgs_abundance_files/'
     for file in os.listdir():
-        wgs_file_name = wgs_dir + 'wgs_' + file
+        wgs_file_name = wgs_dir + 'wgs-' + file
         with open(file,'r') as f:
             with open(wgs_file_name, 'w+') as g:
                 for line in f.readlines():
