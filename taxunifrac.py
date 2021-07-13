@@ -1054,11 +1054,12 @@ def pairwise_unifrac(dir, plot_title, alpha):
     '''
     cur_dir = os.getcwd()
     file_lst = os.listdir(dir) #list files in the directory
-    #print(file_lst)
+    print(file_lst)
     os.chdir(dir)
     if '.DS_Store' in file_lst:
         file_lst.remove('.DS_Store')
-    sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
+    #sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
+    sample_lst = [os.path.splitext(profile)[0].split('.')[0] for profile in file_lst] #e.g.env1sam10
     #create metadata
     metadata = dict()
     for name in sample_lst:
@@ -1313,6 +1314,14 @@ def test_create_biom_table():
         print(list(map(lambda x: x.abundance, v)))
         print(np.sum(list(map(lambda x: float(x.abundance), v))))
 
-if __name__ == '__main__':
-    get_dist_dict('data/grinder_distance_matrix.txt')
+def test_open_profile_from_tsv(profile_file, alpha):
+    profile_list1 = open_profile_from_tsv(profile_file, False)
+    name1, metadata1, profile1 = profile_list1[0]
+    profile1 = Profile(sample_metadata=metadata1, profile=profile1, branch_length_fun=lambda x: x ** alpha)
+    print(profile1._data)
+    print(profile1.sample_metadata)
 
+if __name__ == '__main__':
+    #get_dist_dict('data/grinder_distance_matrix.txt')
+    test_open_profile_from_tsv('data/stage1/sample_runs/range1000dist-1run65/profiles/env1sam0.profile',
+                               1)
