@@ -18,7 +18,7 @@ import itertools as it
 import matplotlib.pyplot as plt
 import tkinter
 import matplotlib
-#matplotlib.use('TkAgg')
+matplotlib.use('TkAgg')
 from skbio.stats.ordination import pcoa
 ncbi = NCBITaxa()
 from multiprocessing import Pool
@@ -1179,7 +1179,8 @@ def get_dataframe_for_simulated(dir, alpha, save_as):
         Range.append(rg)
         sim = int(re.findall("d(.*)-", file)[0])
         similarity.append(sim)
-        dist_matrix_16s = pd.read_table("exported_distance_matrix/distance-matrix.tsv", index_col=0)
+        #dist_matrix_16s = pd.read_table("exported_distance_matrix/distance-matrix.tsv", index_col=0)
+        dist_matrix_16s = pd.read_table("distance-matrix.tsv", index_col=0)
         label_16s = list(map(lambda x: x[3], dist_matrix_16s))
         score_16s = silhouette_score(dist_matrix_16s, label_16s, metric="precomputed")
         print(score_16s)
@@ -1351,6 +1352,28 @@ def get_grinder_abundances_for_both(sample_num, org_num, out_dir, env_num, rnge,
                     (otu, abundance) = line.strip().split('\t')
                     g.writelines([str(otu_acc_dict[otu]), '\t', abundance, '\n'])
 
+def get_grinder_statistics(env_num, metric, data_type, stat):
+    '''
+    :param env_num: 2 or 5
+    :param metric: silhouette or what
+    :param data_type: 16s or wgs
+    :param stat: mean or median
+    :return:
+    '''
+    if env_num == 2:
+        df = pd.read_table("data/stage2/stage2env2_combined_df.txt")
+        data_type_df = df[df['data_type'] == data_type]
+        if stat == "mean":
+            return np.mean(data_type_df[metric])
+        elif stat == "median":
+            return np.median(data_type_df[metric])
+    else:
+        df = pd.read_table("data/stage2/stage2env5_combined_df.txt")
+        data_type_df = df[df['data_type'] == data_type]
+        if stat == "mean":
+            return np.mean(data_type_df[metric])
+        elif stat == "median":
+            return np.median(data_type_df[metric])
 
 def get_metadata_from_real_data(meta_file):
     cancer_df=pd.read_csv(meta_file)
@@ -1568,6 +1591,123 @@ def create_GTDB_profile(node_list, outdir, filename, tax_dict, name_tax_dict, GT
     f.close()
     return
 
+def node_selection(distance_dict, dissimilarity, sample_range, num_org, num_sample):
+    '''
+
+    :param distance_dict: obtained from second distance matrix
+    :param dissimilarity:
+    :param sample_range:
+    :param num_org:
+    :param num_sample:
+    :return:
+    '''
+    node1 = random.choice(list(distance_dict.keys()))
+    node2 = distance_dict[node1][dissimilarity]
+    print(node1)
+    print(node2)
+    data_dict = dict()
+    print(len(distance_dict.keys()))
+    env1_nodes = distance_dict[node1][:sample_range]
+    env2_nodes = distance_dict[node2][:sample_range]
+    for i, node in enumerate(env1_nodes):
+        # create Nodes
+        new_node = Node(name=node)
+        env1_nodes[i] = new_node
+    for i, node in enumerate(env2_nodes):
+        new_node = Node(name=node)
+        env2_nodes[i] = new_node
+    # create sample
+    if num_org >= sample_range:
+        for i in range(num_sample):
+            env1_key = "{}{}".format('env1sam', i)
+            env2_key = "{}{}".format('env2sam', i)
+            value1 = copy.deepcopy(env1_nodes)
+            value2 = copy.deepcopy(env2_nodes)
+            random.shuffle(value1)
+            random.shuffle(value2)
+            data_dict[env1_key] = value1
+            data_dict[env2_key] = value2
+    else:
+        for i in range(num_sample):
+            env1_key = "{}{}".format('env1sam', i)
+            env2_key = "{}{}".format('env2sam', i)
+            value1 = copy.deepcopy(random.sample(env1_nodes, num_org))
+            value2 = copy.deepcopy(random.sample(env2_nodes, num_org))
+            data_dict[env1_key] = value1
+            data_dict[env2_key] = value2
+    return data_dict
+
+def create_ncbi_GTDB_profile(node_list, outdir, filename, name_tax_dict, GTDBid_taxid_dict):
+    '''
+    Create profile based on NCBI lineage
+    :param node_list: a list of Node objects with abundances. No taxid. Only species. Obtained from node_selection
+    :param outdir:
+    :param filename:
+    :param tax_dict:
+    :param name_tax_dict:
+    :param GTDBid_taxid_dict:
+    :return:
+    '''
+
+    ab_dict = dict() # {taxid:abundance}
+    rank_list = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
+    rank_dict = dict()
+    taxpath_dict = dict()
+    tax_name_dict = {y:x for x, y in name_tax_dict.items()} #taxid:sci name
+    for rank in rank_list:
+        rank_dict[rank] = set()
+    for node in node_list:
+        node.tax = GTDBid_taxid_dict[node.name]
+        #print(node.tax)
+        lin = ncbi.get_lineage(node.tax) #lineage
+        lin_dict = ncbi.get_rank(lin) #id:rank
+        lin_dict_reverse = {y:x for x, y in lin_dict.items()} #rank:id
+        if node.tax != lin[-1]:
+            node.tax = lin[-1]
+        if lin_dict[node.tax] != "species":
+            node.tax = lin_dict_reverse["species"]
+        rank_dict['species'].add(node.tax)
+        for rank in rank_list:
+            taxid = lin_dict_reverse[rank]
+            rank_dict[rank].add(taxid)
+            if taxid not in ab_dict:
+                ab_dict[taxid] = node.abundance
+            else:
+                ab_dict[taxid] += node.abundance
+        taxpath = str(lin_dict_reverse["superkingdom"])
+        for rank in rank_list[1:]:
+            taxpath = taxpath + "|" + str(lin_dict_reverse[rank])
+        taxpath_dict[node.tax] = taxpath
+        for rank in rank_list:
+            taxpath = str(lin_dict_reverse["superkingdom"])
+            taxid = lin_dict_reverse[rank]
+            rank_pos = rank_list.index(rank)
+            for other_rank in rank_list[1:rank_pos+1]:
+                taxpath = taxpath + '|' + str(lin_dict_reverse[other_rank])
+            taxpath_dict[taxid] = taxpath
+
+    outfile = outdir + '/' + filename
+    f = open(outfile, "w+")
+    f.write("# Taxonomic Profiling Output\n"
+            "@SampleID:SAMPLEID\n"
+            "@Version:0.9.1\n"
+            "@Ranks:superkingdom|phylum|class|order|family|genus|species\n"
+            "@TaxonomyID:ncbi-taxonomy_DATE\n"
+            "@@TAXID    RANK    TAXPATH TAXPATHSN   PERCENTAGE\n")
+    #print(rank_dict)
+    for rank in rank_list:
+        for taxid in rank_dict[rank]:
+            taxpath = taxpath_dict[taxid]
+            taxpath_lst = taxpath.split('|')
+            namepath_lst = list(map(lambda x: ncbi.get_taxid_translator([taxid])[taxid], taxpath_lst))
+            namepath = "|".join(namepath_lst)
+            f.writelines([str(taxid), "\t", rank, "\t", taxpath, "\t", namepath, "\t", str(ab_dict[taxid])])
+            f.write("\n")
+    f.close()
+    return
+
+
+
 def create_GTDB_data(distance_dict, similarity, sample_range, num_org, num_sample):
     node1 = random.choice(list(distance_dict.keys()))
     node2 = distance_dict[node1][similarity]
@@ -1575,8 +1715,8 @@ def create_GTDB_data(distance_dict, similarity, sample_range, num_org, num_sampl
     print(node2)
     data_dict = dict()
     print(len(distance_dict.keys()))
-    env1_nodes = distance_dict[node1][:sample_range - 1]
-    env2_nodes = distance_dict[node2][:sample_range - 1]
+    env1_nodes = distance_dict[node1][:sample_range]
+    env2_nodes = distance_dict[node2][:sample_range]
     for i, node in enumerate(env1_nodes):
         #create Nodes, update tax
         new_node = Node(name=node)
@@ -1603,6 +1743,11 @@ def create_GTDB_data(distance_dict, similarity, sample_range, num_org, num_sampl
             value2 = copy.deepcopy(random.sample(env2_nodes, num_org))
             data_dict[env1_key] = value1
             data_dict[env2_key] = value2
+    #add abundance
+    for key, value in list(data_dict.items()):  # key = sample id, value = list of Nodes
+        for x, node in enumerate(value, 1):
+            ab = 100. / (1.5 ** x)
+            ab = ab + halfnorm.rvs()
     return data_dict
 
 def create_GTDB_biom_table(table_id, data, filename, normalize=False):
@@ -1634,6 +1779,63 @@ def create_GTDB_biom_table(table_id, data, filename, normalize=False):
         else:
             table.to_tsv(direct_io=f)
     return data
+
+def get_GTDB_dataframe(dir, alpha, save_as):
+    col_names = ["range", "dissimilarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
+    cur_dir = os.getcwd()
+    dir_lst = os.listdir(dir)[1:]
+    os.chdir(dir)
+    sil_score_16s = []
+    sil_score_wgs = []
+    calinski_16s = []
+    calinski_wgs = []
+    davies_16s = []
+    davies_wgs = []
+    Range = []
+    dissimilarity = []
+    for exp_dir in dir_lst:
+        os.chdir(exp_dir)  # individual run
+        # get 16s score
+        rg = int(re.findall("r(.*)d", exp_dir)[0])
+        Range.append(rg)
+        sim = int(re.findall("d(.*)-", exp_dir)[0])
+        dissimilarity.append(sim)
+        dist_matrix_16s = pd.read_table("distance-matrix.tsv", index_col=0)
+        label_16s = list(map(lambda x: x[3], dist_matrix_16s))
+        score_16s = silhouette_score(dist_matrix_16s, label_16s, metric="precomputed")
+        print(score_16s)
+        sil_score_16s.append(score_16s)
+        calinski_16s.append(calinski_harabasz_score(dist_matrix_16s, label_16s))
+        davies_16s.append(davies_bouldin_score(dist_matrix_16s, label_16s))
+        # get wgs score
+        sample_lst_wgs, dist_matrix_wgs, metadata = pairwise_unifrac('profiles', alpha=alpha, show=False)
+        label_wgs = list(map(lambda x: x[3], sample_lst_wgs))
+        score_wgs = silhouette_score(dist_matrix_wgs, label_wgs, metric="precomputed")
+        sil_score_wgs.append(score_wgs)
+        calinski_wgs.append(calinski_harabasz_score(dist_matrix_wgs, label_wgs))
+        davies_wgs.append(davies_bouldin_score(dist_matrix_wgs, label_wgs))
+        os.chdir('..')
+    df_16s = pd.DataFrame(columns=col_names, index=range(len(dir_lst)))
+    df_16s["data_type"] = "16s"
+    df_16s["sample_id"] = dir_lst
+    df_16s["range"] = Range
+    df_16s["dissimilarity"] = dissimilarity
+    df_16s["silhouette"] = sil_score_16s
+    df_16s["Calinski-Harabasz"] = calinski_16s
+    df_16s["Davies-Bouldin"] = davies_16s
+    df_wgs = pd.DataFrame(columns=col_names, index=range(len(dir_lst)))
+    df_wgs["data_type"] = "wgs"
+    df_wgs["sample_id"] = dir_lst
+    df_wgs["range"] = Range
+    df_wgs["dissimilarity"] = dissimilarity
+    df_wgs["silhouette"] = sil_score_wgs
+    df_wgs["Calinski-Harabasz"] = calinski_wgs
+    df_wgs["Davies-Bouldin"] = davies_wgs
+    df_combined = pd.concat([df_16s, df_wgs])
+    print(df_combined)
+    os.chdir(cur_dir)
+    df_combined.to_csv(save_as, sep="\t")
+    return df_combined
 
 def get_GTDBid_taxid_dict(taxonomy_dict, name_taxid_dict):
     GTDBid_taxid_dict = dict()
@@ -1735,6 +1937,21 @@ def get_GTDB_valid_IDs(taxid_file, taxonomy_file):
                 valid_ids.append(id)
     return valid_ids
 
+def get_nodes_without_complete_NCBI_lineage():
+    invalid_nodes = []
+    with open('data/GTDB/bac120_valid_nodes.txt', 'r') as f:
+        nodes = f.readlines()
+    nodes = list(map(lambda x: x.strip(), nodes))
+    tax_dict = parse_taxonomy_file('data/GTDB/bac120_taxonomy_no_numeric.tsv')
+    name_tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
+    GTDBid_taxid_dict = get_GTDBid_taxid_dict(tax_dict, name_tax_dict)
+    for node in nodes:
+        if check_rank(GTDBid_taxid_dict[node]) is False:
+            invalid_nodes.append(node)
+    print(len(invalid_nodes))
+    return invalid_nodes
+
+
 #tests
 def test_get_GTDBid_taxid_dict():
     tax_dict = parse_taxonomy_file('data/GTDB/bac120_taxonomy_no_numeric.tsv')
@@ -1767,6 +1984,17 @@ def test_create_GTDB_profile():
     name_tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
     GTDBid_taxid_dict = get_GTDBid_taxid_dict(tax_dict, name_tax_dict)
     create_GTDB_profile(real_nodes, 'data/GTDB/testprofile', 'testprofile1.profile', tax_dict, name_tax_dict, GTDBid_taxid_dict)
+
+def test_create_ncbi_GTDB_profile():
+    nodes = ['RS_GCF_000422325.1', 'RS_GCF_010725055.1', 'RS_GCF_007994055.1', 'GB_GCA_014648475.1', 'RS_GCF_900172335.1']
+    real_nodes = []
+    for i, org in enumerate(nodes, 1):
+        real_node = Node(name=org, abundance=100 / (2 ** i))
+        real_nodes.append(real_node)
+    tax_dict = parse_taxonomy_file('data/GTDB/bac120_taxonomy_no_numeric.tsv')
+    name_tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
+    GTDBid_taxid_dict = get_GTDBid_taxid_dict(tax_dict, name_tax_dict)
+    create_ncbi_GTDB_profile(real_nodes, outdir='data/GTDB/testprofile', filename='test_ncbi_profile.profile', name_tax_dict=name_tax_dict, GTDBid_taxid_dict=GTDBid_taxid_dict)
 
 def test_create_biom_table():
     dist_dict = get_dist_dict('data/sorted_distance_mini.txt')
@@ -1801,6 +2029,20 @@ def test_get_metadata_partial():
     meta = get_metadata_from_real_data_partial('data/stage3/body_sites12261.csv', 'data/stage3/test_profiles')
     print(meta)
 
+def count_valid_GTDB_nodes():
+    count=0
+    with open('data/GTDB/bac120_valid_nodes.txt', 'r') as f:
+        nodes = f.readlines()
+    nodes = list(map(lambda x: x.strip(), nodes))
+    print(len(nodes))
+    tax_dict = parse_taxonomy_file('data/GTDB/bac120_taxonomy_no_numeric.tsv')
+    name_tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
+    GTDBid_taxid_dict = get_GTDBid_taxid_dict(tax_dict, name_tax_dict)
+    for node in nodes:
+        if check_rank(GTDBid_taxid_dict[node]) is True:
+            count+=1
+    print(count)
+
 if __name__ == '__main__':
     #test_get_dataframe_simulated()
     #test_get_metadata_partial()
@@ -1809,5 +2051,7 @@ if __name__ == '__main__':
                                #1)
     #tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
     #print(tax_dict)
-    test_create_GTDB_profile()
+    #test_create_GTDB_profile()
     #test_get_GTDBid_taxid_dict()
+    #count_valid_GTDB_nodes()
+    test_create_ncbi_GTDB_profile()
