@@ -1,6 +1,6 @@
 [1. WGSUniFrac Reproducibles](#reproducible)
 
-[2. WGSUniFrac User Manual](#user manual)
+[2. WGSUniFrac User Manual](#user_manual)
 
 
 
@@ -34,5 +34,5 @@ cd reproducibles
 
 
 
-## 2. WGSUniFrac User Manual <a name="user manual"></a>
+## 2. WGSUniFrac User Manual <a name="user_manual"></a>
 
