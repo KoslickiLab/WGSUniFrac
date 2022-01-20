@@ -1,12 +1,38 @@
-#get otu tables and profiles at the same time
-python utils.py
+[1. WGSUniFrac Reproducibles](#reproducible)
 
-#####qiime part
-#convert to biom table
-biom convert -i gg_test.tsv -o gg_test.biom --table-type="OTU table" --to-hdf5
-qiime tools import --input-path gg_test4.biom --type 'FeatureTable[Frequency]' --input-format BIOMV210Format --output-path feature-table.qza
-qiime diversity beta-phylogenetic --i-table feature-table.qza --i-phylogeny tree.qza --p-metric weighted_unifrac --o-distance-matrix distance_matrix_from_qiime.qza
-qiime tools export --input-path distance_matrix_from_qiime.qza --output-path exported_distance_matrix
+[2. WGSUniFrac User Manual](#user_manual)
 
-#get plot from exported qiime data
-python WGSsimulation.py
+
+
+### Pre-requisites
+
+* python 3.6 (or higher)
+
+### Installation
+
+```
+git clone https://github.com/KoslickiLab/WGSUniFrac.git
+bash install_dependencies.sh
+```
+
+
+
+## 1. WGSUniFrac Reproducibles <a name="reproducible"></a>
+
+### Additional pre-requisites (install as needed)
+
+* Grinder: for simulating amplicon and WGS reads. 
+  * https://github.com/zyxue/biogrinder
+* mOTUs: for profiling WGS reads into taxonomic profiles.
+  * https://github.com/motu-tool/mOTUs
+
+```
+cd reproducibles
+```
+
+
+
+
+
+## 2. WGSUniFrac User Manual <a name="user_manual"></a>
+
