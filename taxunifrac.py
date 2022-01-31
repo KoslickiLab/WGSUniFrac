@@ -16,12 +16,10 @@ from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bo
 import re
 import itertools as it
 import matplotlib.pyplot as plt
-import tkinter
 import matplotlib
-matplotlib.use('TkAgg')
+#matplotlib.use('TkAgg')
 from skbio.stats.ordination import pcoa
 ncbi = NCBITaxa()
-from multiprocessing import Pool
 
 
 # classes
@@ -568,8 +566,7 @@ def open_profile_from_tsv(file_path, normalize):
             if line.startswith("@@"):
                 for index, column_name in enumerate(line[2:].split('\t')):
                     column_name_to_index[column_name] = index
-                index_rank, index_taxid, index_percentage, index_taxpath, index_taxpathsn = get_column_indices(
-                    column_name_to_index)
+                index_rank, index_taxid, index_percentage, index_taxpath, index_taxpathsn = get_column_indices(column_name_to_index)
                 got_column_indices = True
                 reading_data = False
                 continue
@@ -849,17 +846,6 @@ def EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q):
     return (Z, diffab)
 
 #taxunifrac
-def setup(return_dist_dict=False):
-    os.chdir('data')
-   # (T, l, nodes) = parse_tree_file('99_otus.tree')
-   # otu_tax_dict = filter_against_tree('otu_with_valid_taxid.txt', nodes)
-    otu_acc_dict = _get_dict_from_file('mapping_file2.txt', 0, 2)
-    if return_dist_dict is True:
-        distance_dict = get_dist_dict('sorted_distance_complete.txt')
-        return (otu_acc_dict, distance_dict)
-    else:
-        return (otu_acc_dict)
-
 def _write_dict_to_file(result, filename):
     for otu, taxid in list(result.items()):
         with open(filename, 'a') as f:
@@ -867,19 +853,22 @@ def _write_dict_to_file(result, filename):
             f.write("%s\t" % taxid)
             f.write("\n")
 
-def _get_dict_from_file(file, key_col, val_col):
+def get_dict_from_file(file, key_col, val_col):
     _dict = dict()
     with open(file,'r') as f:
         for line in f.readlines():
             line = line.strip()
             item = line.split('\t')
-            if len(item) > val_col:
-                _dict[item[key_col]] = item[val_col][1:] #remove '>'
+            key = item[key_col]
+            value = item[val_col]
+            if value[0] == ">":
+                value = value[1:]
+            _dict[key] = value
     return _dict
 
 def _get_16s_genome_with_wgs_data():
     os.chdir('data')
-    otu_acc_dict = _get_dict_from_file('mapping_file2.txt', 0, 2)
+    otu_acc_dict = get_dict_from_file('mapping_file2.txt', 0, 2)
     new_file = 'filtered_99_otus.fasta'
     #double check with wgs_genome file
     wgs_file = open('wgs_genome2.fasta', 'r')
@@ -1030,17 +1019,17 @@ def create_biom_table(table_id, data, filename, normalize=False):
             table.to_tsv(direct_io=f)
     return data
 
-def run_one(dist_dict, tax_dict, num_org, num_sample, range, similarity, run):
+def run_one(dist_dict, tax_dict, num_org, num_sample, Range, dissimilarity, run, out_dir):
     #create directory
     cur_dir = os.getcwd()
-    dir_name = "range" + str(range) + "dist" + str(similarity) + "run" + str(run)
+    dir_name = out_dir + "/env2r" + str(Range) + "d" + str(dissimilarity) + "-" + str(run)
     if os.path.exists(dir_name):
         print("directory exists")
         return
     os.mkdir(dir_name)
     os.chdir(dir_name)
-    data = create_data_simple(num_org=num_org, num_sample=num_sample, sample_range=range,
-                              similarity=similarity, distance_dict=dist_dict, tax_dict=tax_dict)
+    data = create_data_simple(num_org=num_org, num_sample=num_sample, sample_range=Range,
+                              similarity=dissimilarity, distance_dict=dist_dict, tax_dict=tax_dict)
     updated_data = create_biom_table(dir_name, data, 'otu_table.tsv', True)
     os.mkdir("profiles")
     for key, value in list(updated_data.items()):
@@ -1060,8 +1049,8 @@ def pairwise_unifrac(dir, plot_title="plot", alpha=-1, show=False):
     os.chdir(dir)
     if '.DS_Store' in file_lst:
         file_lst.remove('.DS_Store')
-    sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
-    #sample_lst = [os.path.splitext(profile)[0].split('.')[0] for profile in file_lst] #e.g.env1sam10
+    #sample_lst = [os.path.splitext(profile)[0].split('-',1)[1] for profile in file_lst] #e.g.env1-sample10
+    sample_lst = [os.path.splitext(profile)[0].split('.')[0] for profile in file_lst] #e.g.env1sam10
     #create metadata
     metadata = dict()
     for name in sample_lst:
@@ -1389,7 +1378,7 @@ def get_metadata_from_real_data_partial(meta_file, profile_dir, by):
     sample_lst = list(map(lambda x: x.split('.')[0], file_lst))
     metadata=dict()
     if by == "bodysites":
-        by_col = "HMgDB_sample_site_"
+        by_col = "HMgDB_sample_site_1"
     elif by == "study":
         by_col = "BioprojectID"
     df = pd.read_csv(meta_file, usecols=["library_id", by_col])
@@ -1510,7 +1499,7 @@ def get_pcoa(dist_matrix, sample_lst, metadata, plot_title):
     dm = DistanceMatrix(dist_matrix, sample_lst)
     print(dm)
     dist_pc = pcoa(dm)
-    dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title)
+    dist_pc.plot(df=df, column="environment", cmap="Set1", title=plot_title, axis_labels=('PC1', 'PC2', 'PC3'))
     #label = list(map(lambda x: metadata[x], sample_lst))
     #print(label)
     #score = silhouette_score(dist_matrix, label, metric="precomputed")
@@ -1579,7 +1568,7 @@ def create_GTDB_profile(node_list, outdir, filename, tax_dict, name_tax_dict, GT
             "@Version:0.9.1\n"
             "@Ranks:superkingdom|phylum|class|order|family|genus|species\n"
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
-            "@@TAXID	RANK	TAXPATH	TAXPATHSN	PERCENTAGE\n")
+            "@@TAXID\tRANK\tTAXPATH\tTAXPATHSN\tPERCENTAGE\n")
     for rank in rank_list:
         for taxid in rank_dict[rank]:
             namepath = taxpath_dict[taxid]
@@ -1635,6 +1624,16 @@ def node_selection(distance_dict, dissimilarity, sample_range, num_org, num_samp
             value2 = copy.deepcopy(random.sample(env2_nodes, num_org))
             data_dict[env1_key] = value1
             data_dict[env2_key] = value2
+    # add abundance
+    for key, value in list(data_dict.items()):  # key = sample id, value = list of Nodes
+        total = 0.
+        for x, node in enumerate(value, 1):
+            ab = 100. / (1.5 ** x)
+            ab = ab + halfnorm.rvs()
+            total += ab
+            node.abundance = ab
+        for node in value: #normalize
+            node.abundance = node.abundance/total * 100.
     return data_dict
 
 def create_ncbi_GTDB_profile(node_list, outdir, filename, name_tax_dict, GTDBid_taxid_dict):
@@ -1693,7 +1692,7 @@ def create_ncbi_GTDB_profile(node_list, outdir, filename, name_tax_dict, GTDBid_
             "@Version:0.9.1\n"
             "@Ranks:superkingdom|phylum|class|order|family|genus|species\n"
             "@TaxonomyID:ncbi-taxonomy_DATE\n"
-            "@@TAXID    RANK    TAXPATH TAXPATHSN   PERCENTAGE\n")
+            "@@TAXID\tRANK\tTAXPATH\tTAXPATHSN\tPERCENTAGE\n")
     #print(rank_dict)
     for rank in rank_list:
         for taxid in rank_dict[rank]:
@@ -1743,11 +1742,6 @@ def create_GTDB_data(distance_dict, similarity, sample_range, num_org, num_sampl
             value2 = copy.deepcopy(random.sample(env2_nodes, num_org))
             data_dict[env1_key] = value1
             data_dict[env2_key] = value2
-    #add abundance
-    for key, value in list(data_dict.items()):  # key = sample id, value = list of Nodes
-        for x, node in enumerate(value, 1):
-            ab = 100. / (1.5 ** x)
-            ab = ab + halfnorm.rvs()
     return data_dict
 
 def create_GTDB_biom_table(table_id, data, filename, normalize=False):
@@ -1783,7 +1777,8 @@ def create_GTDB_biom_table(table_id, data, filename, normalize=False):
 def get_GTDB_dataframe(dir, alpha, save_as):
     col_names = ["range", "dissimilarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
     cur_dir = os.getcwd()
-    dir_lst = os.listdir(dir)[1:]
+    #dir_lst = os.listdir(dir)[1:]
+    dir_lst = os.listdir(dir)
     os.chdir(dir)
     sil_score_16s = []
     sil_score_wgs = []
@@ -1832,6 +1827,63 @@ def get_GTDB_dataframe(dir, alpha, save_as):
     df_wgs["Calinski-Harabasz"] = calinski_wgs
     df_wgs["Davies-Bouldin"] = davies_wgs
     df_combined = pd.concat([df_16s, df_wgs])
+    print(df_combined)
+    os.chdir(cur_dir)
+    df_combined.to_csv(save_as, sep="\t")
+    return df_combined
+
+def get_GTDB_dataframe_2(dir, alpha, save_as):
+    col_names = ["range", "dissimilarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type",
+                 "sample_id"]
+    cur_dir = os.getcwd()
+    dir_lst = os.listdir(dir)
+    os.chdir(dir)
+    sil_score_gtdb = []
+    sil_score_ncbi = []
+    calinski_gtdb = []
+    calinski_ncbi = []
+    davies_gtdb = []
+    davies_ncbi = []
+    Range = []
+    dissimilarity = []
+    for exp_dir in dir_lst:
+        os.chdir(exp_dir)  # individual run
+        rg = int(re.findall("r(.*)d", exp_dir)[0])
+        Range.append(rg)
+        sim = int(re.findall("d(.*)-", exp_dir)[0])
+        dissimilarity.append(sim)
+        # get gtdb score
+        sample_lst_gtdb, dist_matrix_gtdb, metadata = pairwise_unifrac('GTDB_profiles', alpha=alpha, show=False)
+        label_gtdb = list(map(lambda x: x[3], sample_lst_gtdb))
+        score_gtdb = silhouette_score(dist_matrix_gtdb, label_gtdb, metric="precomputed")
+        sil_score_gtdb.append(score_gtdb)
+        calinski_gtdb.append(calinski_harabasz_score(dist_matrix_gtdb, label_gtdb))
+        davies_gtdb.append(davies_bouldin_score(dist_matrix_gtdb, label_gtdb))
+        #get ncbi score
+        sample_lst_ncbi, dist_matrix_ncbi, metadata = pairwise_unifrac('NCBI_profiles', alpha=alpha, show=False)
+        label_ncbi = list(map(lambda x: x[3], sample_lst_ncbi))
+        score_ncbi = silhouette_score(dist_matrix_ncbi, label_ncbi, metric="precomputed")
+        sil_score_ncbi.append(score_ncbi)
+        calinski_ncbi.append(calinski_harabasz_score(dist_matrix_ncbi, label_ncbi))
+        davies_ncbi.append(davies_bouldin_score(dist_matrix_ncbi, label_ncbi))
+        os.chdir('..')
+    df_gtdb = pd.DataFrame(columns=col_names, index=range(len(dir_lst)))
+    df_gtdb["data_type"] = "GTDB"
+    df_gtdb["sample_id"] = dir_lst
+    df_gtdb["range"] = Range
+    df_gtdb["dissimilarity"] = dissimilarity
+    df_gtdb["silhouette"] = sil_score_gtdb
+    df_gtdb["Calinski-Harabasz"] = calinski_gtdb
+    df_gtdb["Davies-Bouldin"] = davies_gtdb
+    df_ncbi = pd.DataFrame(columns=col_names, index=range(len(dir_lst)))
+    df_ncbi["data_type"] = "NCBI"
+    df_ncbi["sample_id"] = dir_lst
+    df_ncbi["range"] = Range
+    df_ncbi["dissimilarity"] = dissimilarity
+    df_ncbi["silhouette"] = sil_score_ncbi
+    df_ncbi["Calinski-Harabasz"] = calinski_ncbi
+    df_ncbi["Davies-Bouldin"] = davies_ncbi
+    df_combined = pd.concat([df_gtdb, df_ncbi])
     print(df_combined)
     os.chdir(cur_dir)
     df_combined.to_csv(save_as, sep="\t")
@@ -1986,7 +2038,8 @@ def test_create_GTDB_profile():
     create_GTDB_profile(real_nodes, 'data/GTDB/testprofile', 'testprofile1.profile', tax_dict, name_tax_dict, GTDBid_taxid_dict)
 
 def test_create_ncbi_GTDB_profile():
-    nodes = ['RS_GCF_000422325.1', 'RS_GCF_010725055.1', 'RS_GCF_007994055.1', 'GB_GCA_014648475.1', 'RS_GCF_900172335.1']
+    #nodes = ['RS_GCF_000422325.1', 'RS_GCF_010725055.1', 'RS_GCF_007994055.1', 'GB_GCA_014648475.1', 'RS_GCF_900172335.1']
+    nodes = ['GB_GCA_014647835.1', 'RS_GCF_001570365.1', 'RS_GCF_009687845.1', 'RS_GCF_001570605.1', 'RS_GCF_001570525.1']
     real_nodes = []
     for i, org in enumerate(nodes, 1):
         real_node = Node(name=org, abundance=100 / (2 ** i))
@@ -1994,7 +2047,7 @@ def test_create_ncbi_GTDB_profile():
     tax_dict = parse_taxonomy_file('data/GTDB/bac120_taxonomy_no_numeric.tsv')
     name_tax_dict = get_name_taxid_dict('data/GTDB/bac120_all_taxons_taxids_valid.txt')
     GTDBid_taxid_dict = get_GTDBid_taxid_dict(tax_dict, name_tax_dict)
-    create_ncbi_GTDB_profile(real_nodes, outdir='data/GTDB/testprofile', filename='test_ncbi_profile.profile', name_tax_dict=name_tax_dict, GTDBid_taxid_dict=GTDBid_taxid_dict)
+    create_ncbi_GTDB_profile(real_nodes, outdir='data/GTDB/testprofile', filename='test_ncbi_profile2.profile', name_tax_dict=name_tax_dict, GTDBid_taxid_dict=GTDBid_taxid_dict)
 
 def test_create_biom_table():
     dist_dict = get_dist_dict('data/sorted_distance_mini.txt')
@@ -2043,7 +2096,20 @@ def count_valid_GTDB_nodes():
             count+=1
     print(count)
 
-if __name__ == '__main__':
+def test_ncbi_unifrac():
+    profile_list1 = open_profile_from_tsv('data/GTDB/testprofile/test_ncbi_profile.profile', False)
+    profile_list2 = open_profile_from_tsv('data/GTDB/testprofile/test_ncbi_profile2.profile', False)
+    name1, metadata1, profile1 = profile_list1[0]
+    name2, metadata2, profile2 = profile_list2[0]
+    profile1 = Profile(sample_metadata=metadata1, profile=profile1, branch_length_fun=lambda x: x ** -1)
+    profile2 = Profile(sample_metadata=metadata2, profile=profile2, branch_length_fun=lambda x: x ** -1)
+    # (Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_no_normalize(profile2)
+    (Tint, lint, nodes_in_order, nodes_to_index, P, Q) = profile1.make_unifrac_input_and_normalize(profile2)
+    (weighted, _) = EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
+    print(weighted)
+    return
+
+#if __name__ == '__main__':
     #test_get_dataframe_simulated()
     #test_get_metadata_partial()
     #get_dist_dict('data/grinder_distance_matrix.txt')
@@ -2054,4 +2120,5 @@ if __name__ == '__main__':
     #test_create_GTDB_profile()
     #test_get_GTDBid_taxid_dict()
     #count_valid_GTDB_nodes()
-    test_create_ncbi_GTDB_profile()
+    #test_create_ncbi_GTDB_profile()
+    #test_ncbi_unifrac()

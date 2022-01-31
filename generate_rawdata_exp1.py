@@ -1,3 +1,4 @@
+import os
 import taxunifrac as tu
 import argparse
 
@@ -13,11 +14,15 @@ if __name__ == '__main__':
     mapping_file = args.mapping_file
 
     distance_dict = tu.get_dist_dict(dist_file)
-    otu_tax_dict = tu.get_dict_from_file(mapping_file, 0, 1)
+    otu_tax_dict = tu.get_dict_from_file(mapping_file, 0, 2)
     ranges = [200, 500, 1000, 5000, 10000, 15000, 20000]
     dissimilarity = [-1, 30000, 20000, 10000, 5000, 1000, 900, 800]
     range_out_dir = out_dir + "/testRange"
     diss_out_dir = out_dir + "/testDissimilarity"
+    if not os.path.exists(range_out_dir):
+        os.mkdir(range_out_dir)
+    if not os.path.exists(diss_out_dir):
+        os.mkdir(diss_out_dir)
     for r in ranges:
         for i in range(100):
             tu.run_one(distance_dict, otu_tax_dict, num_org=200, num_sample=25, Range=r, dissimilarity=-1, run=i,
