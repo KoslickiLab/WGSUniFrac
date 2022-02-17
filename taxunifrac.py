@@ -1095,7 +1095,10 @@ def pairwise_unifrac(dir, plot_title="plot", alpha=-1, show=False):
 
 def get_dataframe(dir, alpha, save_as):
     col_names = ["range", "similarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
-    file_lst = os.listdir(dir)[1:]
+    file_lst = os.listdir(dir)
+    cur_dir = os.getcwd()
+    save_file_name = cur_dir + '/' + save_as
+    print("Dadaframe will be saved as: ", save_file_name)
     os.chdir(dir)
     sil_score_16s = []
     sil_score_wgs = []
@@ -1108,9 +1111,9 @@ def get_dataframe(dir, alpha, save_as):
     for file in file_lst:
         os.chdir(file) #individual run
         #get 16s score
-        rg = int(re.findall("range(.*)dist", file)[0])
+        rg = int(re.findall("env2r(.*)d", file)[0])
         Range.append(rg)
-        sim = int(re.findall("dist(.*)run", file)[0])
+        sim = int(re.findall("d(.*)-", file)[0])
         if sim == -1:
             sim = 35461
         similarity.append(sim)
@@ -1122,7 +1125,7 @@ def get_dataframe(dir, alpha, save_as):
         davies_16s.append(davies_bouldin_score(dist_matrix_16s, label_16s))
         #get wgs score
         sample_lst_wgs, dist_matrix_wgs, metadata = pairwise_unifrac('profiles', alpha=alpha, show=False)
-        label_wgs = list(map(lambda x: x[3], sample_lst_wgs))
+        label_wgs = list(map(lambda x: x[3], sample_lst_wgs)) #which environment
         score_wgs = silhouette_score(dist_matrix_wgs, label_wgs, metric="precomputed")
         sil_score_wgs.append(score_wgs)
         calinski_wgs.append(calinski_harabasz_score(dist_matrix_wgs, label_wgs))
