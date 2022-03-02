@@ -1094,11 +1094,12 @@ def pairwise_unifrac(dir, plot_title="plot", alpha=-1, show=False):
     return sample_lst, dist_matrix, metadata
 
 def get_dataframe(dir, alpha, save_as):
-    col_names = ["range", "similarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
+    col_names = ["range", "dissimilarity", "silhouette", "Calinski-Harabasz", "Davies-Bouldin", "data_type", "sample_id"]
     file_lst = os.listdir(dir)
     cur_dir = os.getcwd()
     save_file_name = cur_dir + '/' + save_as
-    print("Dadaframe will be saved as: ", save_file_name)
+    print("Dataframe will be saved as: ", save_file_name)
+    open(save_file_name, 'w+')
     os.chdir(dir)
     sil_score_16s = []
     sil_score_wgs = []
@@ -1131,11 +1132,12 @@ def get_dataframe(dir, alpha, save_as):
         calinski_wgs.append(calinski_harabasz_score(dist_matrix_wgs, label_wgs))
         davies_wgs.append(davies_bouldin_score(dist_matrix_wgs, label_wgs))
         os.chdir('..')
+    os.chdir(cur_dir)
     df_16s = pd.DataFrame(columns=col_names, index=range(len(file_lst)))
     df_16s["data_type"] = "16s"
     df_16s["sample_id"] = file_lst
     df_16s["range"] = Range
-    df_16s["similarity"] = similarity
+    df_16s["dissimilarity"] = similarity
     df_16s["silhouette"] = sil_score_16s
     df_16s["Calinski-Harabasz"] = calinski_16s
     df_16s["Davies-Bouldin"] = davies_16s
@@ -1143,7 +1145,7 @@ def get_dataframe(dir, alpha, save_as):
     df_wgs["data_type"] = "wgs"
     df_wgs["sample_id"] = file_lst
     df_wgs["range"] = Range
-    df_wgs["similarity"] = similarity
+    df_wgs["dissimilarity"] = similarity
     df_wgs["silhouette"] = sil_score_wgs
     df_wgs["Calinski-Harabasz"] = calinski_wgs
     df_wgs["Davies-Bouldin"] = davies_wgs
@@ -1214,12 +1216,12 @@ def get_boxplot(df, x, y):
     sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=["m", "g"])
     plt.show()
 
-def get_plot_from_file(file, x, y, pallete):
+def get_plot_from_file(file, x, y, palette, save):
     df = pd.read_table(file, index_col=0)
     print(df)
     sns.set_theme(style="ticks", palette="pastel")
-    sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=pallete)
-    plt.show()
+    sns.boxplot(x=x, y=y, hue="data_type", data=df, palette=palette)
+    plt.savefig(save)
 
 def get_plot_from_exported(matrix_file, plot_title):
     #pcoa plot

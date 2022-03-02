@@ -87,6 +87,13 @@ python get_combined_dataframe_exp1.py -d reproducibles/exp1/testRange -a -1 -s '
 python get_combined_dataframe_exp1.py -d reproducibles/exp1/testDissimilarity -a -1 -s 'reproducibles/exp1/combined_dataframe_dissimilarity.txt'
 ```
 
+5. Get boxplots from the dataframe.
+
+```
+python generate_plot_exp1.py -f reproducibles/exp1/combined_dataframe_range.txt -x range -y silhouette -s 'reproducibles/exp1/range_vs_silhouette_boxplot.png' 
+python generate_plot_exp1.py -f reproducibles/exp1/combined_dataframe_dissimilarity.txt -x dissimilarity -y silhouette -s 'reproducibles/exp1/dissimilarity_vs_silhouette_boxplot.png'
+```
+
 
 
 ## 2. WGSUniFrac User Manual <a name="user_manual"></a>
