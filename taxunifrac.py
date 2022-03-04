@@ -1426,12 +1426,14 @@ def _get_unifrac(pair, alpha):
     id2 = os.path.splitext(profile_file2)[0].split('/')[-1]
     return id1, id2, weighted
 
-def just_pairwise_unifrac(dir, alpha):
+def just_pairwise_unifrac(dir, alpha, save_as):
     '''
     :param dir: directory containing the .profile files
     :param alpha factor for branch length function  x**alpha
     :return: a dataframe of pairwise distance matrix
     '''
+    if save_as is None:
+        save_as = "pairwise_WGSUniFrac_matrix.csv"
     cur_dir = os.getcwd()
     file_lst = os.listdir(dir)  # list files in the directory
     # print(file_lst)
@@ -1466,7 +1468,7 @@ def just_pairwise_unifrac(dir, alpha):
         (weighted, _) = EMDUnifrac_weighted(Tint, lint, nodes_in_order, P, Q)
         dist_matrix[i][j] = dist_matrix[j][i] = weighted
     os.chdir(cur_dir)
-    print(sample_lst)
+    pd.DataFrame(data=dist_matrix, index=sample_lst, columns=sample_lst).to_csv(save_as, sep="\t")
     return dist_matrix, sample_lst
 
 def _get_empty_df(dir):

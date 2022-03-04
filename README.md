@@ -97,6 +97,14 @@ python generate_plot_exp1.py -f reproducibles/exp1/combined_dataframe_dissimilar
 
 
 ## 2. WGSUniFrac User Manual <a name="user_manual"></a>
+WGSUniFrac takes a directory containing WGS profiles as input and produces a pairwise WGSUniFrac distance matrix file as an output. Run `python get_pairwise_unifrac.py -h` to see the options.
+
+An example is given below.
+
+```
+python get_pairwise_unifrac.py -d profile_dir -a -1 -s "my_WGSUniFrac.csv"
+```
+
 
 
 
