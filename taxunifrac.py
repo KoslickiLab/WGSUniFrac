@@ -1346,6 +1346,40 @@ def get_grinder_abundances_for_both(sample_num, org_num, out_dir, env_num, rnge,
                     (otu, abundance) = line.strip().split('\t')
                     g.writelines([str(otu_acc_dict[otu]), '\t', abundance, '\n'])
 
+def get_grinder_abundance_for_ogu(sample_num, org_num, out_dir, env_num, rnge, distance_dict, dissim):
+    if not os.path.exists(out_dir):
+        os.mkdir(out_dir)
+    os.chdir(out_dir)
+    if not os.path.exists('abundance_files'):
+        os.mkdir('abundance_files')
+    # choose env nodes
+    env_nodes = []
+    for i in range(env_num):
+        print(env_nodes)
+        if len(env_nodes) == 0:
+            node1 = random.choice(list(distance_dict.keys()))  # env 1
+            env_nodes.append(node1)
+        else:
+            prev_node = env_nodes[-1]
+            #print('prev_node is', prev_node)
+            cur_node = distance_dict[prev_node][dissim]
+            #print('current node is', cur_node)
+            neighbor = 1
+            while cur_node in env_nodes:
+                # if cur_node already in env_nodes, pick one close enough
+                cur_node = distance_dict[cur_node][neighbor]
+                neighbor += 1
+            env_nodes.append(cur_node)
+    
+    os.chdir('abundance_files')
+    for env in range(env_num):
+        for sampl in range(sample_num):
+            file_name = 'env' + str(env) + '-sample' + str(sampl) + '.txt'
+            print(file_name)
+            sample_nodes = random.sample(distance_dict[env_nodes[env]][:rnge], org_num)
+            get_abundance_file(sample_nodes, file_name)
+    
+
 def get_grinder_statistics(env_num, metric, data_type, stat):
     '''
     :param env_num: 2 or 5
