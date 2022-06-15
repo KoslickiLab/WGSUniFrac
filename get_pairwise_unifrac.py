@@ -1,4 +1,4 @@
-import taxunifrac as tu
+import wgsunifrac as wu
 import argparse
 
 #Produces pairwise UniFrac distance matrix with user given input
@@ -13,7 +13,7 @@ def main():
     dir = args.dir
     alpha=args.alpha
     save = args.save
-    tu.just_pairwise_unifrac(dir, alpha, save)
+    wu.just_pairwise_unifrac(dir, alpha, save)
 
 
 if __name__ == '__main__':
