@@ -1,4 +1,3 @@
-1. WGSUniFrac Reproducibles
 
 ### Pre-requisites
 
